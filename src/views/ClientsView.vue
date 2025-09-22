@@ -100,6 +100,10 @@
 
 <script setup>
 import { ref, computed, nextTick } from "vue";
+import { useDataStore } from "@/stores/useDataStore";
+
+// --- Get Data from the Store ---
+const { clients } = useDataStore();
 
 // --- State Management ---
 const dialog = ref(false);
@@ -126,36 +130,13 @@ const rules = {
   email: (value) => /.+@.+\..+/.test(value) || "Invalid e-mail.",
 };
 
-// --- Table Data (Mock Data) ---
+// --- Table Headers ---
 const headers = ref([
   { title: "Name", key: "name", align: "start" },
   { title: "Email", key: "email" },
   { title: "Status", key: "status" },
   { title: "Last Active", key: "last_active" },
   { title: "Actions", key: "actions", sortable: false },
-]);
-const clients = ref([
-  {
-    id: 1,
-    name: "Jane Doe",
-    email: "jane.doe@example.com",
-    status: "Active",
-    last_active: "2025-09-21",
-  },
-  {
-    id: 2,
-    name: "John Smith",
-    email: "john.smith@example.com",
-    status: "Active",
-    last_active: "2025-09-20",
-  },
-  {
-    id: 3,
-    name: "Peter Jones",
-    email: "peter.jones@example.com",
-    status: "Pending",
-    last_active: "2025-09-15",
-  },
 ]);
 
 // --- Component Methods ---

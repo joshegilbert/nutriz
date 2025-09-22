@@ -141,6 +141,10 @@
 
 <script setup>
 import { ref, computed, nextTick } from "vue";
+import { useDataStore } from "@/stores/useDataStore";
+
+// --- Get Data from the Store ---
+const { recipes } = useDataStore();
 
 // --- State Management ---
 const dialog = ref(false);
@@ -167,46 +171,6 @@ const formTitle = computed(() => {
 const rules = {
   required: (value) => !!value || "Required.",
 };
-
-// --- Mock Data ---
-const recipes = ref([
-  {
-    id: 1,
-    name: "Chicken and Broccoli",
-    description: "A classic healthy meal, perfect for weeknights.",
-    calories: 450,
-    protein: 50,
-    imageUrl:
-      "https://images.unsplash.com/photo-1580959375944-abd7d992f9da?q=80&w=800",
-  },
-  {
-    id: 2,
-    name: "Salmon with Asparagus",
-    description: "Rich in omega-3s and packed with flavor.",
-    calories: 550,
-    protein: 45,
-    imageUrl:
-      "https://images.unsplash.com/photo-1467003909585-2f8a72700288?q=80&w=800",
-  },
-  {
-    id: 3,
-    name: "Quinoa Salad",
-    description: "A refreshing and protein-packed vegetarian option.",
-    calories: 350,
-    protein: 15,
-    imageUrl:
-      "https://images.unsplash.com/photo-1551248429-40974aa41727?q=80&w=800",
-  },
-  {
-    id: 4,
-    name: "Greek Yogurt Bowl",
-    description: "Perfect for a quick and healthy breakfast.",
-    calories: 300,
-    protein: 25,
-    imageUrl:
-      "https://images.unsplash.com/photo-1555949258-26e4Ac28d585?q=80&w=800",
-  },
-]);
 
 // --- Component Methods ---
 function openAddDialog() {
