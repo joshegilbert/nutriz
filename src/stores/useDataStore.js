@@ -1,6 +1,5 @@
 import { ref } from "vue";
 
-// Reactive state for clients
 const clients = ref([
   {
     id: 1,
@@ -8,6 +7,16 @@ const clients = ref([
     email: "jane.doe@example.com",
     status: "Active",
     last_active: "2025-09-21",
+    mealPlan: {
+      // 👈 Add this
+      monday: [1, 3],
+      tuesday: [2],
+      wednesday: [],
+      thursday: [4],
+      friday: [1],
+      saturday: [],
+      sunday: [],
+    },
   },
   {
     id: 2,
@@ -15,6 +24,16 @@ const clients = ref([
     email: "john.smith@example.com",
     status: "Active",
     last_active: "2025-09-20",
+    mealPlan: {
+      // 👈 Add this
+      monday: [4],
+      tuesday: [],
+      wednesday: [2, 3],
+      thursday: [],
+      friday: [],
+      saturday: [1],
+      sunday: [],
+    },
   },
   {
     id: 3,
@@ -22,8 +41,20 @@ const clients = ref([
     email: "peter.jones@example.com",
     status: "Pending",
     last_active: "2025-09-15",
+    mealPlan: {
+      // 👈 Add this
+      monday: [],
+      tuesday: [],
+      wednesday: [],
+      thursday: [],
+      friday: [],
+      saturday: [],
+      sunday: [],
+    },
   },
 ]);
+
+// ... (export function is unchanged)
 
 // Reactive state for recipes
 const recipes = ref([

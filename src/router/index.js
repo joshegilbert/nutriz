@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
-import DefaultLayout from "../layouts/DefaultLayout.vue"; // 👈 Import the layout
+import DefaultLayout from "../layouts/DefaultLayout.vue";
 
 const routes = [
   // Routes that use the DefaultLayout
@@ -8,7 +8,7 @@ const routes = [
     component: DefaultLayout,
     children: [
       {
-        path: "", // Default child route
+        path: "",
         redirect: "/dashboard",
       },
       {
@@ -20,6 +20,12 @@ const routes = [
         path: "clients",
         name: "Clients",
         component: () => import("../views/ClientsView.vue"),
+      },
+      // 👇 This is the correct placement for the new route
+      {
+        path: "clients/:id",
+        name: "ClientDetail",
+        component: () => import("../views/ClientDetailView.vue"),
       },
       {
         path: "recipes",

@@ -19,11 +19,21 @@
           item-key="id"
           class="elevation-1"
         >
+          <template v-slot:item.name="{ item }">
+            <router-link
+              :to="`/clients/${item.id}`"
+              class="text-primary font-weight-bold text-decoration-none"
+            >
+              {{ item.name }}
+            </router-link>
+          </template>
+
           <template v-slot:item.status="{ item }">
             <v-chip :color="item.status === 'Active' ? 'green' : 'orange'" dark>
               {{ item.status }}
             </v-chip>
           </template>
+
           <template v-slot:item.actions="{ item }">
             <v-icon small class="mr-2" @click="editClient(item)">
               mdi-pencil
