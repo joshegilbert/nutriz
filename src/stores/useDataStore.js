@@ -8,16 +8,20 @@ const clients = ref([
     status: "Active",
     last_active: "2025-09-21",
     mealPlan: {
-      // 👈 Add this
-      monday: [1, 3],
-      tuesday: [2],
+      monday: [
+        { mealTime: "Breakfast", recipeId: 4 },
+        { mealTime: "Lunch", recipeId: 3 },
+        { mealTime: "Dinner", recipeId: 1 },
+      ],
+      tuesday: [{ mealTime: "Dinner", recipeId: 2 }],
       wednesday: [],
-      thursday: [4],
-      friday: [1],
+      thursday: [{ mealTime: "Breakfast", recipeId: 4 }],
+      friday: [{ mealTime: "Dinner", recipeId: 1 }],
       saturday: [],
       sunday: [],
     },
   },
+
   {
     id: 2,
     name: "John Smith",
@@ -25,7 +29,6 @@ const clients = ref([
     status: "Active",
     last_active: "2025-09-20",
     mealPlan: {
-      // 👈 Add this
       monday: [4],
       tuesday: [],
       wednesday: [2, 3],
@@ -42,7 +45,6 @@ const clients = ref([
     status: "Pending",
     last_active: "2025-09-15",
     mealPlan: {
-      // 👈 Add this
       monday: [],
       tuesday: [],
       wednesday: [],
@@ -54,48 +56,48 @@ const clients = ref([
   },
 ]);
 
-// ... (export function is unchanged)
-
-// Reactive state for recipes
 const recipes = ref([
   {
     id: 1,
-    name: "Chicken and Broccoli",
-    description: "A classic healthy meal.",
+    name: "Chicken and Broccoli Stir-fry",
+    description: "A classic healthy meal, perfect for weeknights.",
     calories: 450,
     protein: 50,
-    imageUrl: "https://i.redd.it/lzeuyzw54mza1.jpg",
+    carbs: 15,
+    fat: 20,
+    imageUrl:
+      "https://images.unsplash.com/photo-1580959375944-abd7d992f9da?q=80&w=800",
+    ingredients: [
+      { amount: "150g", name: "Chicken Breast" },
+      { amount: "1 cup", name: "Broccoli Florets" },
+      { amount: "1 tbsp", name: "Soy Sauce" },
+    ],
+    instructions:
+      "1. Cook chicken in a hot pan.\n2. Add broccoli and stir-fry until tender.\n3. Add soy sauce and serve.",
+    tags: ["High Protein", "Quick Meal", "Dinner"],
   },
   {
     id: 2,
     name: "Salmon with Asparagus",
-    description: "Rich in omega-3s.",
+    description: "Rich in omega-3s and packed with flavor.",
     calories: 550,
     protein: 45,
+    carbs: 10,
+    fat: 35,
     imageUrl:
       "https://images.unsplash.com/photo-1467003909585-2f8a72700288?q=80&w=800",
-  },
-  {
-    id: 3,
-    name: "Quinoa Salad",
-    description: "A vegetarian option.",
-    calories: 350,
-    protein: 15,
-    imageUrl:
-      "https://masterpiecer-images.s3.yandex.net/0cbdd5df864c11eeb95dceda526c50ab:upscaled",
-  },
-  {
-    id: 4,
-    name: "Greek Yogurt Bowl",
-    description: "Perfect for breakfast.",
-    calories: 300,
-    protein: 25,
-    imageUrl:
-      "https://pics.craiyon.com/2023-08-04/e419f4f8746d48b6a0f401d6a257af4f.webp",
+    ingredients: [
+      { amount: "200g", name: "Salmon Fillet" },
+      { amount: "1 bunch", name: "Asparagus" },
+      { amount: "1 tbsp", name: "Olive Oil" },
+      { amount: "1", name: "Lemon" },
+    ],
+    instructions:
+      "1. Toss asparagus with olive oil.\n2. Season salmon with salt and pepper.\n3. Bake at 400°F (200°C) for 12-15 minutes.\n4. Squeeze lemon over the top before serving.",
+    tags: ["High Protein", "Keto Friendly"],
   },
 ]);
 
-// The composable function to be used in components
 export function useDataStore() {
   return { clients, recipes };
 }

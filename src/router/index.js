@@ -21,11 +21,15 @@ const routes = [
         name: "Clients",
         component: () => import("../views/ClientsView.vue"),
       },
-      // 👇 This is the correct placement for the new route
       {
         path: "clients/:id",
         name: "ClientDetail",
         component: () => import("../views/ClientDetailView.vue"),
+      },
+      {
+        path: "clients/:id/plan",
+        name: "PlanSummary",
+        component: () => import("../views/PlanSummaryView.vue"),
       },
       {
         path: "recipes",
