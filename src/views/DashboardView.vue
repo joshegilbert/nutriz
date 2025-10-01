@@ -40,7 +40,7 @@
     <v-row>
       <!-- Client Notifications -->
       <v-col cols="12" md="7">
-        <v-card class="mt-4">
+        <v-card class="mt-4" height="100%">
           <v-card-title>
             <v-icon start icon="mdi-bell-ring"></v-icon>
             Client Notifications
@@ -72,7 +72,7 @@
 
       <!-- Weight Check-ins -->
       <v-col cols="12" md="5">
-        <v-card class="mt-4">
+        <v-card class="mt-4" height="100%">
           <v-card-title>
             <v-icon start icon="mdi-weight-lifter"></v-icon>
             Weight Check-ins
