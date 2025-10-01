@@ -1,0 +1,6 @@
+starting a server for backend: 
+    cd nutriz-backend
+    node server.js
+
+starting a server for frontend: 
+    npm run dev
