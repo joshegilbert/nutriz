@@ -139,12 +139,44 @@
     <v-row>
       <v-col cols="12">
         <v-card class="mt-4">
-          <v-card-title>Quick Actions</v-card-title>
+          <v-card-title>Key Actions & Tools</v-card-title>
           <v-card-text>
-            <v-btn to="/clients" color="primary" class="mr-2">
-              Manage Clients
-            </v-btn>
-            <v-btn to="/recipes" color="primary">Manage Recipes</v-btn>
+            <v-row align="center">
+              <v-col cols="12">
+                <v-btn to="/plan-assignment" color="primary" class="mr-2 mb-2">
+                  <v-icon start icon="mdi-calendar-edit"></v-icon>
+                  Assign Weekly Plan
+                </v-btn>
+                <v-btn to="/clients" color="secondary" class="mr-2 mb-2">
+                  Manage Clients
+                </v-btn>
+                <v-btn to="/recipes" color="secondary" class="mr-2 mb-2">
+                  Manage Recipes
+                </v-btn>
+                <v-btn @click="messageTeam" color="info" class="mb-2">
+                  <v-icon start icon="mdi-message-text"></v-icon>
+                  Message Team
+                </v-btn>
+              </v-col>
+            </v-row>
+            <v-divider class="my-4"></v-divider>
+            <v-row>
+              <v-col cols="12">
+                <h3 class="text-h6 mb-2">AI Substitute Tool</h3>
+                <div class="d-flex">
+                  <v-text-field
+                    v-model="substituteSearch"
+                    label="e.g., 'Grilled Chicken'"
+                    dense
+                    class="mr-2"
+                  ></v-text-field>
+                  <v-btn @click="findSubstitute" color="success">
+                    <v-icon start icon="mdi-robot"></v-icon>
+                    Find
+                  </v-btn>
+                </div>
+              </v-col>
+            </v-row>
           </v-card-text>
         </v-card>
       </v-col>
@@ -214,6 +246,31 @@ const weightCheckIns = ref([
     history: [145, 143, 141.5, 140],
   },
 ]);
+
+const substituteSearch = ref("");
+
+function findSubstitute() {
+  if (!substituteSearch.value) {
+    alert("Please enter a food to substitute.");
+    return;
+  }
+  // In a real app, this would call an AI service.
+  alert(`Searching for a substitute for '${substituteSearch.value}'...`);
+  // Mock result
+  setTimeout(() => {
+    alert(
+      `AI Suggestion: 'Tofu' is a good substitute for '${substituteSearch.value}' with similar protein content.`
+    );
+  }, 1000);
+}
+
+function messageTeam() {
+  // In a real app, this would open a messaging interface.
+  const message = prompt("Enter your message for the team:");
+  if (message) {
+    alert(`Message sent to the team: "${message}"`);
+  }
+}
 
 function quickMessage(clientId, type) {
   const client = clients.value.find((c) => c.id === clientId);
