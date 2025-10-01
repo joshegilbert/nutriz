@@ -37,9 +37,9 @@
       </v-col>
     </v-row>
 
-    <!-- Client Notifications -->
     <v-row>
-      <v-col cols="12">
+      <!-- Client Notifications -->
+      <v-col cols="12" md="7">
         <v-card class="mt-4">
           <v-card-title>
             <v-icon start icon="mdi-bell-ring"></v-icon>
@@ -69,6 +69,71 @@
           </v-list>
         </v-card>
       </v-col>
+
+      <!-- Weight Check-ins -->
+      <v-col cols="12" md="5">
+        <v-card class="mt-4">
+          <v-card-title>
+            <v-icon start icon="mdi-weight-lifter"></v-icon>
+            Weight Check-ins
+          </v-card-title>
+          <v-divider></v-divider>
+          <v-list>
+            <v-list-item
+              v-for="checkIn in weightCheckIns"
+              :key="checkIn.id"
+              class="py-3"
+            >
+              <div>
+                <div class="d-flex align-center justify-space-between">
+                  <div>
+                    <v-list-item-title class="font-weight-bold">{{ checkIn.clientName }}</v-list-item-title>
+                    <v-list-item-subtitle>
+                      <v-icon small :color="checkIn.change > 0 ? 'red' : 'green'">{{ checkIn.change > 0 ? "mdi-arrow-up" : "mdi-arrow-down" }}</v-icon>
+                      {{ Math.abs(checkIn.change) }} lbs | Current: {{ checkIn.currentWeight }} lbs
+                    </v-list-item-subtitle>
+                  </div>
+
+                  <v-sparkline
+                    :model-value="checkIn.history"
+                    :color="checkIn.isConcerning ? 'orange' : 'green'"
+                    line-width="2"
+                    padding="8"
+                    auto-draw
+                    style="width: 100px; height: 40px"
+                  ></v-sparkline>
+                </div>
+
+                <div class="mt-2">
+                  <v-btn
+                    size="small"
+                    color="success"
+                    class="mr-2"
+                    @click="quickMessage(checkIn.clientId, 'good_job')"
+                  >
+                    Good Job!
+                  </v-btn>
+                  <v-btn
+                    size="small"
+                    @click="quickMessage(checkIn.clientId, 'personal')"
+                  >
+                    Message
+                  </v-btn>
+                  <v-chip
+                    v-if="checkIn.isConcerning"
+                    size="small"
+                    color="orange"
+                    variant="tonal"
+                    class="ml-2"
+                  >
+                    Follow Up
+                  </v-chip>
+                </div>
+              </div>
+            </v-list-item>
+          </v-list>
+        </v-card>
+      </v-col>
     </v-row>
 
     <v-row>
@@ -91,14 +156,11 @@
 import { computed, ref } from "vue";
 import { useDataStore } from "@/stores/useDataStore";
 
-// Get the shared data from our store
 const { clients, recipes } = useDataStore();
 
-// Create computed properties that will automatically update
 const totalClients = computed(() => clients.value.length);
 const totalRecipes = computed(() => recipes.value.length);
 
-// Mock data for notifications. In a real app, this would come from a backend.
 const notifications = ref([
   {
     id: 1,
@@ -122,4 +184,50 @@ const notifications = ref([
     timestamp: "1 day ago",
   },
 ]);
+
+const weightCheckIns = ref([
+  {
+    id: 1,
+    clientId: 1,
+    clientName: "John Doe",
+    change: -2,
+    currentWeight: 188,
+    isConcerning: false,
+    history: [192, 191, 190, 188],
+  },
+  {
+    id: 2,
+    clientId: 2,
+    clientName: "Peter Jones",
+    change: 1,
+    currentWeight: 205,
+    isConcerning: true,
+    history: [202, 203, 204, 205],
+  },
+  {
+    id: 3,
+    clientId: 3,
+    clientName: "Jane Smith",
+    change: -1.5,
+    currentWeight: 140,
+    isConcerning: false,
+    history: [145, 143, 141.5, 140],
+  },
+]);
+
+function quickMessage(clientId, type) {
+  const client = clients.value.find((c) => c.id === clientId);
+  if (!client) return;
+
+  if (type === "good_job") {
+    console.log(`Sending 'Good Job!' to ${client.name}`);
+    alert(`Message sent to ${client.name}: Good job on your progress!`);
+  } else {
+    console.log(`Opening personal message for ${client.name}`);
+    const message = prompt(`Enter personal message for ${client.name}:`);
+    if (message) {
+      alert(`Message sent to ${client.name}: ${message}`);
+    }
+  }
+}
 </script>

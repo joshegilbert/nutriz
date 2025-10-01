@@ -3,7 +3,7 @@
     <div v-if="!client">
       <p>Loading client plan...</p>
     </div>
-    <v-else>
+    <div v-else>
       <v-row>
         <!-- Main Content: Meal Plan -->
         <v-col cols="12" md="8">
@@ -49,60 +49,58 @@
           </v-card>
 
           <!-- Daily Meal Plan Breakdown -->
-          <v-row v-for="day in weeklyPlan" :key="day.name">
-            <v-col cols="12">
-              <h2 class="text-h5 mb-2">{{ day.name }}</h2>
-              <v-card
-                class="mb-4"
-                v-for="meal in day.meals"
-                :key="meal.mealTime"
-              >
-                <v-card-title class="d-flex justify-space-between">
-                  <span>{{ meal.mealTime }}</span>
-                  <span class="text-subtitle-1 font-weight-light">
-                    {{ meal.totals.calories }} kcal | P:{{
-                      meal.totals.protein
-                    }}g | C:{{ meal.totals.carbs }}g | F:{{ meal.totals.fat }}g
-                  </span>
-                </v-card-title>
-                <v-divider></v-divider>
-                <v-list lines="one">
-                  <v-list-item
-                    v-for="recipe in meal.recipes"
-                    :key="recipe.id"
-                    :title="recipe.name"
-                    :prepend-avatar="recipe.imageUrl"
-                  ></v-list-item>
-                </v-list>
-              </v-card>
-              <v-card variant="tonal" color="primary" class="mb-6 pa-2">
-                <div class="d-flex justify-space-around text-center">
-                  <div>
-                    <div class="text-caption">Total Calories</div>
-                    <div class="font-weight-bold">
-                      {{ day.dayTotals.calories }}
-                    </div>
-                  </div>
-                  <div>
-                    <div class="text-caption">Total Protein</div>
-                    <div class="font-weight-bold">
-                      {{ day.dayTotals.protein }}g
-                    </div>
-                  </div>
-                  <div>
-                    <div class="text-caption">Total Carbs</div>
-                    <div class="font-weight-bold">
-                      {{ day.dayTotals.carbs }}g
-                    </div>
-                  </div>
-                  <div>
-                    <div class="text-caption">Total Fat</div>
-                    <div class="font-weight-bold">{{ day.dayTotals.fat }}g</div>
+          <div v-for="day in weeklyPlan" :key="day.name">
+            <h2 class="text-h5 mb-2">{{ day.name }}</h2>
+            <v-card
+              class="mb-4"
+              v-for="meal in day.meals"
+              :key="meal.mealTime"
+            >
+              <v-card-title class="d-flex justify-space-between">
+                <span>{{ meal.mealTime }}</span>
+                <span class="text-subtitle-1 font-weight-light">
+                  {{ meal.totals.calories }} kcal | P:{{
+                    meal.totals.protein
+                  }}g | C:{{ meal.totals.carbs }}g | F:{{ meal.totals.fat }}g
+                </span>
+              </v-card-title>
+              <v-divider></v-divider>
+              <v-list lines="one">
+                <v-list-item
+                  v-for="recipe in meal.recipes"
+                  :key="recipe.id"
+                  :title="recipe.name"
+                  :prepend-avatar="recipe.imageUrl"
+                ></v-list-item>
+              </v-list>
+            </v-card>
+            <v-card variant="tonal" color="primary" class="mb-6 pa-2">
+              <div class="d-flex justify-space-around text-center">
+                <div>
+                  <div class="text-caption">Total Calories</div>
+                  <div class="font-weight-bold">
+                    {{ day.dayTotals.calories }}
                   </div>
                 </div>
-              </v-card>
-            </v-col>
-          </v-row>
+                <div>
+                  <div class="text-caption">Total Protein</div>
+                  <div class="font-weight-bold">
+                    {{ day.dayTotals.protein }}g
+                  </div>
+                </div>
+                <div>
+                  <div class="text-caption">Total Carbs</div>
+                  <div class="font-weight-bold">
+                    {{ day.dayTotals.carbs }}g
+                  </div>
+                </div>
+                <div>
+                  <div class="text-caption">Total Fat</div>
+                  <div class="font-weight-bold">{{ day.dayTotals.fat }}g</div>
+                </div>
+              </div>
+            </v-card>
+          </div>
         </v-col>
 
         <!-- Sidebar: Client Notifications -->
@@ -256,7 +254,7 @@ const shoppingList = computed(() => {
   const days = [
     "monday",
     "tuesday",
-    "wednesday",
+"wednesday",
     "thursday",
     "friday",
     "saturday",
