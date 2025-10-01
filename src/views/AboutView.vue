@@ -9,7 +9,7 @@
           <v-card-text class="pa-5">
             <p class="text-body-1">
               Nutriz is a modern, intuitive application designed to help
-              nutritionists and dietitians manage their clients, create
+              nutritionists and dietitians manage their client, create
               customized meal plans, and track their progress effectively.
             </p>
 

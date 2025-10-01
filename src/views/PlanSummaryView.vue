@@ -3,10 +3,11 @@
     <div v-if="!client">
       <p>Loading client plan...</p>
     </div>
-    <div v-else>
-      <!-- Page Header -->
+    <v-else>
       <v-row>
-        <v-col cols="12">
+        <!-- Main Content: Meal Plan -->
+        <v-col cols="12" md="8">
+          <!-- Page Header -->
           <div class="d-flex align-center mb-4">
             <v-btn
               :to="`/clients/${client.id}`"
@@ -27,12 +28,8 @@
               Print
             </v-btn>
           </div>
-        </v-col>
-      </v-row>
 
-      <!-- Shopping List Card -->
-      <v-row>
-        <v-col cols="12" md="8" offset-md="2">
+          <!-- Shopping List Card -->
           <v-card class="mb-6">
             <v-card-title class="d-flex align-center">
               <v-icon start icon="mdi-cart"></v-icon>
@@ -50,51 +47,96 @@
               </v-list-item>
             </v-list>
           </v-card>
-        </v-col>
-      </v-row>
 
-      <!-- Daily Meal Plan Breakdown -->
-      <v-row v-for="day in weeklyPlan" :key="day.name">
-        <v-col cols="12" md="8" offset-md="2">
-          <h2 class="text-h5 mb-2">{{ day.name }}</h2>
-          <v-card class="mb-4" v-for="meal in day.meals" :key="meal.mealTime">
-            <v-card-title class="d-flex justify-space-between">
-              <span>{{ meal.mealTime }}</span>
-              <span class="text-subtitle-1 font-weight-light">
-                {{ meal.totals.calories }} kcal | P:{{ meal.totals.protein }}g |
-                C:{{ meal.totals.carbs }}g | F:{{ meal.totals.fat }}g
-              </span>
-            </v-card-title>
-            <v-divider></v-divider>
-            <v-list lines="one">
-              <v-list-item
-                v-for="recipe in meal.recipes"
-                :key="recipe.id"
-                :title="recipe.name"
-                :prepend-avatar="recipe.imageUrl"
-              ></v-list-item>
-            </v-list>
-          </v-card>
-          <v-card variant="tonal" color="primary" class="mb-6 pa-2">
-            <div class="d-flex justify-space-around text-center">
-              <div>
-                <div class="text-caption">Total Calories</div>
-                <div class="font-weight-bold">{{ day.dayTotals.calories }}</div>
-              </div>
-              <div>
-                <div class="text-caption">Total Protein</div>
-                <div class="font-weight-bold">{{ day.dayTotals.protein }}g</div>
-              </div>
-              <div>
-                <div class="text-caption">Total Carbs</div>
-                <div class="font-weight-bold">{{ day.dayTotals.carbs }}g</div>
-              </div>
-              <div>
-                <div class="text-caption">Total Fat</div>
-                <div class="font-weight-bold">{{ day.dayTotals.fat }}g</div>
-              </div>
-            </div>
-          </v-card>
+          <!-- Daily Meal Plan Breakdown -->
+          <v-row v-for="day in weeklyPlan" :key="day.name">
+            <v-col cols="12">
+              <h2 class="text-h5 mb-2">{{ day.name }}</h2>
+              <v-card
+                class="mb-4"
+                v-for="meal in day.meals"
+                :key="meal.mealTime"
+              >
+                <v-card-title class="d-flex justify-space-between">
+                  <span>{{ meal.mealTime }}</span>
+                  <span class="text-subtitle-1 font-weight-light">
+                    {{ meal.totals.calories }} kcal | P:{{
+                      meal.totals.protein
+                    }}g | C:{{ meal.totals.carbs }}g | F:{{ meal.totals.fat }}g
+                  </span>
+                </v-card-title>
+                <v-divider></v-divider>
+                <v-list lines="one">
+                  <v-list-item
+                    v-for="recipe in meal.recipes"
+                    :key="recipe.id"
+                    :title="recipe.name"
+                    :prepend-avatar="recipe.imageUrl"
+                  ></v-list-item>
+                </v-list>
+              </v-card>
+              <v-card variant="tonal" color="primary" class="mb-6 pa-2">
+                <div class="d-flex justify-space-around text-center">
+                  <div>
+                    <div class="text-caption">Total Calories</div>
+                    <div class="font-weight-bold">
+                      {{ day.dayTotals.calories }}
+                    </div>
+                  </div>
+                  <div>
+                    <div class="text-caption">Total Protein</div>
+                    <div class="font-weight-bold">
+                      {{ day.dayTotals.protein }}g
+                    </div>
+                  </div>
+                  <div>
+                    <div class="text-caption">Total Carbs</div>
+                    <div class="font-weight-bold">
+                      {{ day.dayTotals.carbs }}g
+                    </div>
+                  </div>
+                  <div>
+                    <div class="text-caption">Total Fat</div>
+                    <div class="font-weight-bold">{{ day.dayTotals.fat }}g</div>
+                  </div>
+                </div>
+              </v-card>
+            </v-col>
+          </v-row>
+        </v-col>
+
+        <!-- Sidebar: Client Notifications -->
+        <v-col cols="12" md="4">
+          <div style="position: sticky; top: 80px">
+            <v-card>
+              <v-card-title class="d-flex justify-space-between align-center">
+                <span>Recent History</span>
+                <v-btn
+                  @click="isPanelExpanded = !isPanelExpanded"
+                  :icon="isPanelExpanded ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+                  variant="text"
+                  size="small"
+                ></v-btn>
+              </v-card-title>
+              <v-expand-transition>
+                <div v-show="isPanelExpanded">
+                  <v-divider></v-divider>
+                  <v-list lines="two">
+                    <v-list-item
+                      v-for="notification in clientNotifications"
+                      :key="notification.id"
+                      :subtitle="notification.message"
+                      :title="notification.timestamp"
+                    >
+                      <template v-slot:prepend>
+                        <v-icon>mdi-message-text</v-icon>
+                      </template>
+                    </v-list-item>
+                  </v-list>
+                </div>
+              </v-expand-transition>
+            </v-card>
+          </div>
         </v-col>
       </v-row>
     </div>
@@ -102,16 +144,53 @@
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { ref, computed } from "vue";
 import { useRoute } from "vue-router";
 import { useDataStore } from "@/stores/useDataStore";
 
 const route = useRoute();
 const { clients, recipes } = useDataStore();
 
+const isPanelExpanded = ref(true);
+
 const client = computed(() => {
   const clientId = Number(route.params.id);
   return clients.value.find((c) => c.id === clientId);
+});
+
+// Mock data for notifications. In a real app, this would come from a backend.
+const allNotifications = ref([
+  {
+    id: 1,
+    clientId: 1,
+    message: "I have a question about my Tuesday lunch.",
+    timestamp: "2 hours ago",
+  },
+  {
+    id: 2,
+    clientId: 3,
+    message: "Can I substitute chicken for fish in the plan?",
+    timestamp: "5 hours ago",
+  },
+  {
+    id: 3,
+    clientId: 2,
+    message: "Feeling great this week! The new plan is working wonders.",
+    timestamp: "1 day ago",
+  },
+  {
+    id: 4,
+    clientId: 1,
+    message: "What's a good alternative for almonds as a snack?",
+    timestamp: "2 days ago",
+  },
+]);
+
+const clientNotifications = computed(() => {
+  if (!client.value) return [];
+  return allNotifications.value.filter(
+    (n) => n.clientId === client.value.id
+  );
 });
 
 // New computed property to structure the entire weekly plan for easy display
