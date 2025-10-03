@@ -1,3 +1,5 @@
+// src/router/index.js (Original Version)
+
 import { createRouter, createWebHistory } from "vue-router";
 import DefaultLayout from "../layouts/DefaultLayout.vue";
 
@@ -9,12 +11,7 @@ const routes = [
     children: [
       {
         path: "",
-        redirect: "/dashboard",
-      },
-      {
-        path: "dashboard",
-        name: "Dashboard",
-        component: () => import("../views/DashboardView.vue"),
+        redirect: "/clients",
       },
       {
         path: "clients",
@@ -37,9 +34,14 @@ const routes = [
         component: () => import("../views/RecipesView.vue"),
       },
       {
-        path: "about",
-        name: "About",
-        component: () => import("../views/AboutView.vue"),
+        path: "foods",
+        name: "Foods",
+        component: () => import("../views/FoodsView.vue"),
+      },
+      {
+        path: "meals",
+        name: "Meals",
+        component: () => import("../views/MealsView.vue"),
       },
     ],
   },

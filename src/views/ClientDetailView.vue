@@ -1,143 +1,84 @@
 <template>
   <v-container>
     <div v-if="!client">
-      <p>Loading client details or client not found...</p>
+      <p>Loading client details...</p>
     </div>
     <div v-else>
-      <!-- Client Header -->
       <v-row>
         <v-col cols="12">
           <div class="d-flex align-center mb-4">
-            <v-btn
-              to="/clients"
-              icon="mdi-arrow-left"
-              variant="text"
-              class="mr-2"
-            ></v-btn>
+            <v-btn to="/clients" icon="mdi-arrow-left" variant="text" class="mr-2"></v-btn>
             <h1 class="text-h4">{{ client.name }}</h1>
-            <v-chip
-              :color="client.status === 'Active' ? 'green' : 'orange'"
-              class="ml-4"
-              size="small"
-            >
-              {{ client.status }}
-            </v-chip>
+            <v-chip :color="client.status === 'Active' ? 'green' : 'orange'" class="ml-4" size="small">{{ client.status }}</v-chip>
             <v-spacer></v-spacer>
-            <v-btn :to="`/clients/${client.id}/plan`" color="secondary">
-              View Plan
-            </v-btn>
+            <v-btn :to="`/clients/${client.id}/plan`" color="secondary" prepend-icon="mdi-printer">View Client Plan</v-btn>
           </div>
         </v-col>
       </v-row>
 
-      <!-- Meal Plan Section -->
+      <v-row>
+        <v-col>
+          <v-tabs v-model="selectedWeekIndex" bg-color="white" class="mb-4">
+            <v-tab v-for="(week, index) in client.program" :key="week.weekNumber" :value="index">
+              Week {{ week.weekNumber }}
+            </v-tab>
+            <v-btn variant="text" @click="addWeek" title="Add New Week"><v-icon>mdi-plus</v-icon></v-btn>
+          </v-tabs>
+        </v-col>
+      </v-row>
+
       <v-row>
         <v-col cols="12">
           <v-card>
-            <v-tabs v-model="tab" bg-color="primary" fixed-tabs>
-              <v-tab v-for="day in days" :key="day" :value="day">
-                {{ day }}
-              </v-tab>
+            <v-tabs v-model="selectedDay" bg-color="primary" fixed-tabs>
+              <v-tab v-for="day in daysOfWeek" :key="day" :value="day.toLowerCase()">{{ day }}</v-tab>
             </v-tabs>
-            <v-window v-model="tab">
-              <v-window-item v-for="day in days" :key="day" :value="day">
+            <v-window v-model="selectedDay">
+              <v-window-item v-for="day in daysOfWeek" :key="day" :value="day.toLowerCase()">
                 <v-card-text>
-                  <!-- Daily Summary & Copy/Paste Actions -->
-                  <v-card variant="outlined" class="mb-4">
-                    <v-card-item>
-                      <div class="d-flex justify-space-between align-center">
-                        <v-card-title>Daily Summary</v-card-title>
-                        <div>
-                          <v-btn
-                            size="small"
-                            variant="text"
-                            @click="copyDay(day.toLowerCase())"
-                          >
-                            Copy Day
-                          </v-btn>
-                          <v-btn
-                            size="small"
-                            color="primary"
-                            variant="text"
-                            @click="pasteDay(day.toLowerCase())"
-                            :disabled="!copiedDayPlan"
-                          >
-                            Paste Day
-                          </v-btn>
-                        </div>
-                      </div>
-                      <v-chip-group class="mt-2">
-                        <v-chip color="blue-lighten-1" prepend-icon="mdi-fire">
-                          {{ dailyTotals[day.toLowerCase()].calories }} Calories
-                        </v-chip>
-                        <v-chip
-                          color="green-lighten-1"
-                          prepend-icon="mdi-food-drumstick"
-                        >
-                          {{ dailyTotals[day.toLowerCase()].protein }}g Protein
-                        </v-chip>
-                        <v-chip
-                          color="orange-lighten-1"
-                          prepend-icon="mdi-bread-slice"
-                        >
-                          {{ dailyTotals[day.toLowerCase()].carbs }}g Carbs
-                        </v-chip>
-                        <v-chip
-                          color="red-lighten-1"
-                          prepend-icon="mdi-cupcake"
-                        >
-                          {{ dailyTotals[day.toLowerCase()].fat }}g Fat
-                        </v-chip>
-                      </v-chip-group>
+                  <v-card class="mb-6" variant="tonal" color="primary">
+                    <v-card-item class="d-flex justify-space-between align-center">
+                       <div>
+                         <span class="text-h6">Daily Totals</span>
+                         <v-chip-group>
+                            <v-chip size="small">Cal: {{ dailyTotalMacros.calories.toFixed(0) }}</v-chip>
+                            <v-chip size="small">Prot: {{ dailyTotalMacros.protein.toFixed(0) }}g</v-chip>
+                            <v-chip size="small">Carb: {{ dailyTotalMacros.carbs.toFixed(0) }}g</v-chip>
+                            <v-chip size="small">Fat: {{ dailyTotalMacros.fat.toFixed(0) }}g</v-chip>
+                         </v-chip-group>
+                       </div>
+                       <div>
+                          <v-btn @click="copyDay" size="small" variant="text">Copy Day</v-btn>
+                          <v-btn @click="pasteDay" size="small" variant="text" :disabled="!clipboard">Paste Day</v-btn>
+                       </div>
                     </v-card-item>
                   </v-card>
 
-                  <!-- Mealtime Groups (Unchanged) -->
                   <div v-for="mealTime in mealTimes" :key="mealTime">
-                    <div
-                      v-if="
-                        getRecipesForMealTime(day.toLowerCase(), mealTime)
-                          .length > 0
-                      "
-                    >
-                      <h3 class="text-h6 mb-2">{{ mealTime }}</h3>
-                      <v-list lines="two">
-                        <v-list-item
-                          v-for="recipe in getRecipesForMealTime(
-                            day.toLowerCase(),
-                            mealTime
-                          )"
-                          :key="recipe.id"
-                          :title="recipe.name"
-                          :subtitle="`${recipe.calories} kcal | P:${recipe.protein}g | C:${recipe.carbs}g | F:${recipe.fat}g`"
-                          :prepend-avatar="recipe.imageUrl"
-                        >
-                          <template v-slot:append>
-                            <v-btn
-                              color="grey-lighten-1"
-                              icon="mdi-close"
-                              variant="text"
-                              @click="
-                                removeRecipeFromPlan(
-                                  day.toLowerCase(),
-                                  recipe.id,
-                                  mealTime
-                                )
-                              "
-                            ></v-btn>
-                          </template>
-                        </v-list-item>
-                      </v-list>
+                    <div class="d-flex align-center">
+                      <h3 class="text-h6">{{ mealTime }}</h3>
+                       <div class="text-caption ml-4">
+                          (Cal: {{ getMealTimeMacros(mealTime).calories.toFixed(0) }} / 
+                          Prot: {{ getMealTimeMacros(mealTime).protein.toFixed(0) }}g)
+                       </div>
+                      <v-spacer></v-spacer>
+                      <v-btn size="small" variant="text" @click="openAddItemDialog(mealTime)">+ Add Item</v-btn>
+                    </div>
+                    <v-divider class="mb-4"></v-divider>
+                    
+                    <p v-if="!getItemsForMealTime(mealTime).length" class="text-caption text-center pb-4">No items added.</p>
+                    
+                    <div v-else>
+                        <PlanItemCard 
+                          v-for="item in getItemsForMealTime(mealTime)" 
+                          :key="item.id" 
+                          :item="item" 
+                          is-top-level
+                          @remove="removeItem(item)"
+                          @copy="copyItem"
+                        />
                     </div>
                   </div>
-                  <v-btn
-                    class="mt-4"
-                    color="primary"
-                    size="small"
-                    @click="openAddRecipeDialog(day.toLowerCase())"
-                  >
-                    Add Recipe
-                  </v-btn>
                 </v-card-text>
               </v-window-item>
             </v-window>
@@ -145,134 +86,227 @@
         </v-col>
       </v-row>
     </div>
-    <!-- "Add Recipe" Dialog (Unchanged) -->
-    <v-dialog v-model="dialog" max-width="500px">
-      <!-- ... -->
+
+    <v-dialog v-model="dialog.isOpen" max-width="600px">
+        <v-card>
+            <v-card-title>Add to {{ dialog.mealTime }}</v-card-title>
+            <v-card-text>
+                 <v-radio-group v-model="itemToAdd.type" inline>
+                    <v-radio label="Food" value="food"></v-radio>
+                    <v-radio label="Meal" value="meal"></v-radio>
+                    <v-radio label="Recipe" value="recipe"></v-radio>
+                </v-radio-group>
+                <v-autocomplete
+                    v-if="itemToAdd.type === 'food'"
+                    v-model="itemToAdd.sourceId"
+                    :items="foods"
+                    :item-title="item => `${item.brand} ${item.name}`"
+                    item-value="id"
+                    label="Select a Food"
+                ></v-autocomplete>
+                <v-autocomplete
+                    v-if="itemToAdd.type === 'meal'"
+                    v-model="itemToAdd.sourceId"
+                    :items="meals"
+                    item-title="name"
+                    item-value="id"
+                    label="Select a Meal"
+                ></v-autocomplete>
+                 <v-autocomplete
+                    v-if="itemToAdd.type === 'recipe'"
+                    v-model="itemToAdd.sourceId"
+                    :items="recipes"
+                    item-title="name"
+                    item-value="id"
+                    label="Select a Recipe"
+                ></v-autocomplete>
+            </v-card-text>
+            <v-card-actions>
+                <v-spacer></v-spacer>
+                <v-btn text @click="dialog.isOpen = false">Cancel</v-btn>
+                <v-btn color="primary" @click="addItemToPlan">Add</v-btn>
+            </v-card-actions>
+        </v-card>
     </v-dialog>
-    <!-- Snackbar for feedback -->
-    <v-snackbar v-model="snackbar" :timeout="2000" color="success">
-      {{ snackbarText }}
+     <v-snackbar v-model="snackbar.show" :timeout="2000">
+      {{ snackbar.text }}
     </v-snackbar>
   </v-container>
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, defineAsyncComponent } from "vue";
 import { useRoute } from "vue-router";
 import { useDataStore } from "@/stores/useDataStore";
+import { storeToRefs } from "pinia";
+
+const PlanItemCard = defineAsyncComponent(() => import('@/components/PlanItemCard.vue'));
 
 const route = useRoute();
-const { clients, recipes } = useDataStore();
-const tab = ref(null);
+const dataStore = useDataStore();
+const { clients, foods, meals, recipes } = storeToRefs(dataStore);
 
-const days = [
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-  "Sunday",
-];
+const selectedWeekIndex = ref(0);
+const selectedDay = ref('monday');
+const dialog = ref({ isOpen: false, mealTime: '' });
+const itemToAdd = ref({ type: 'food', sourceId: null });
+const clipboard = ref(null);
+const snackbar = ref({ show: false, text: '' });
+
+const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const mealTimes = ["Breakfast", "Lunch", "Dinner", "Snacks"];
 
-const dialog = ref(false);
-const dayToAddRecipe = ref(null);
-const mealTimeToAddTo = ref(null);
+const client = computed(() => clients.value.find(c => c.id === Number(route.params.id)));
+const currentWeek = computed(() => client.value?.program[selectedWeekIndex.value]);
+const currentDayPlan = computed(() => currentWeek.value?.days[selectedDay.value] || []);
 
-// --- New State for Copy/Paste ---
-const copiedDayPlan = ref(null);
-const snackbar = ref(false);
-const snackbarText = ref("");
-// ---
-
-const client = computed(() => {
-  const clientId = Number(route.params.id);
-  return clients.value.find((c) => c.id === clientId);
-});
-
-const dailyTotals = computed(() => {
-  // ... (logic is unchanged)
-  if (!client.value) return {};
-  const totals = {};
-  days.forEach((day) => {
-    const dayKey = day.toLowerCase();
-    const recipeIds = client.value.mealPlan[dayKey].map(
-      (meal) => meal.recipeId
-    );
-    const dayRecipes = recipeIds
-      .map((id) => recipes.value.find((r) => r.id === id))
-      .filter(Boolean);
-    totals[dayKey] = dayRecipes.reduce(
-      (acc, recipe) => {
-        acc.calories += recipe.calories || 0;
-        acc.protein += recipe.protein || 0;
-        acc.carbs += recipe.carbs || 0;
-        acc.fat += recipe.fat || 0;
-        return acc;
-      },
-      { calories: 0, protein: 0, carbs: 0, fat: 0 }
-    );
-  });
-  return totals;
-});
-
-// --- New Copy/Paste Functions ---
-function copyDay(dayKey) {
-  if (client.value) {
-    copiedDayPlan.value = JSON.parse(
-      JSON.stringify(client.value.mealPlan[dayKey])
-    );
-    snackbarText.value = `Copied ${dayKey}'s plan.`;
-    snackbar.value = true;
-  }
-}
-
-function pasteDay(dayKey) {
-  if (client.value && copiedDayPlan.value) {
-    client.value.mealPlan[dayKey] = JSON.parse(
-      JSON.stringify(copiedDayPlan.value)
-    );
-    snackbarText.value = `Pasted plan to ${dayKey}.`;
-    snackbar.value = true;
-  }
-}
-// ---
-
-function getRecipesForMealTime(day, mealTime) {
-  if (!client.value || !client.value.mealPlan[day]) return [];
-  const mealItems = client.value.mealPlan[day].filter(
-    (meal) => meal.mealTime === mealTime
-  );
-  return mealItems
-    .map((meal) => recipes.value.find((r) => r.id === meal.recipeId))
-    .filter(Boolean);
-}
-
-function openAddRecipeDialog(day) {
-  dayToAddRecipe.value = day;
-  mealTimeToAddTo.value = null;
-  dialog.value = true;
-}
-
-function addRecipeToPlan(recipeId) {
-  const day = dayToAddRecipe.value;
-  const mealTime = mealTimeToAddTo.value;
-  if (day && mealTime && client.value) {
-    client.value.mealPlan[day].push({ mealTime, recipeId });
-  }
-  dialog.value = false;
-}
-
-function removeRecipeFromPlan(day, recipeId, mealTime) {
-  if (client.value) {
-    const dayPlan = client.value.mealPlan[day];
-    const mealIndex = dayPlan.findIndex(
-      (meal) => meal.recipeId === recipeId && meal.mealTime === mealTime
-    );
-    if (mealIndex > -1) {
-      dayPlan.splice(mealIndex, 1);
+function getMacros(item) {
+    const emptyMacros = { calories: 0, protein: 0, carbs: 0, fat: 0 };
+    if (!item) return emptyMacros;
+    if (item.expanded && item.macros) return item.macros;
+    if (item.type === 'food') {
+        const food = foods.value.find(f => f.id === item.sourceId);
+        if (!food) return emptyMacros;
+        const multiplier = item.amount || 0;
+        return {
+            calories: (food.macrosPerServing.calories || 0) * multiplier,
+            protein: (food.macrosPerServing.protein || 0) * multiplier,
+            carbs: (food.macrosPerServing.carbs || 0) * multiplier,
+            fat: (food.macrosPerServing.fat || 0) * multiplier,
+        };
     }
-  }
+    if ((item.type === 'meal' || item.type === 'recipe') && item.components) {
+        const baseMacros = item.components.reduce((acc, comp) => {
+            const compMacros = getMacros(comp);
+            acc.calories += compMacros.calories;
+            acc.protein += compMacros.protein;
+            acc.carbs += compMacros.carbs;
+            acc.fat += compMacros.fat;
+            return acc;
+        }, { ...emptyMacros });
+        const outerMultiplier = item.amount || 1;
+        return {
+            calories: baseMacros.calories * outerMultiplier,
+            protein: baseMacros.protein * outerMultiplier,
+            carbs: baseMacros.carbs * outerMultiplier,
+            fat: baseMacros.fat * outerMultiplier,
+        };
+    }
+    return emptyMacros;
+}
+
+const dailyTotalMacros = computed(() => {
+  return currentDayPlan.value.reduce((totals, item) => {
+    const itemMacros = getMacros(item);
+    totals.calories += itemMacros.calories;
+    totals.protein += itemMacros.protein;
+    totals.carbs += itemMacros.carbs;
+    totals.fat += itemMacros.fat;
+    return totals;
+  }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
+});
+
+function getItemsForMealTime(mealTime) {
+    return currentDayPlan.value.filter(item => item.mealTime === mealTime);
+}
+
+function getMealTimeMacros(mealTime) {
+    return getItemsForMealTime(mealTime).reduce((totals, item) => {
+        const itemMacros = getMacros(item);
+        totals.calories += itemMacros.calories;
+        totals.protein += itemMacros.protein;
+        totals.carbs += itemMacros.carbs;
+        totals.fat += itemMacros.fat;
+        return totals;
+    }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
+}
+
+function openAddItemDialog(mealTime) {
+    itemToAdd.value = { type: 'food', sourceId: null };
+    dialog.value = { isOpen: true, mealTime: mealTime };
+}
+
+function addItemToPlan() {
+    if (!itemToAdd.value.sourceId || !currentWeek.value) return;
+    let sourceItem;
+    let sourceDB;
+    if (itemToAdd.value.type === 'food') sourceDB = foods.value;
+    else if (itemToAdd.value.type === 'meal') sourceDB = meals.value;
+    else if (itemToAdd.value.type === 'recipe') sourceDB = recipes.value;
+    sourceItem = sourceDB.find(i => i.id === itemToAdd.value.sourceId);
+
+    if (!sourceItem) return;
+
+    const newPlanItem = {
+        id: Date.now(),
+        type: itemToAdd.value.type,
+        sourceId: itemToAdd.value.sourceId,
+        mealTime: dialog.value.mealTime,
+        time: "",
+        amount: 1,
+        notes: "",
+        expanded: false,
+    };
+
+    if (itemToAdd.value.type === 'food') {
+        newPlanItem.macros = getMacros(newPlanItem);
+    }
+
+    if ((itemToAdd.value.type === 'meal' || itemToAdd.value.type === 'recipe') && sourceItem.components) {
+        newPlanItem.components = JSON.parse(JSON.stringify(sourceItem.components)).map(c => {
+             const foodComp = {
+                ...c,
+                id: Date.now() + Math.random(),
+                type: 'food',
+                sourceId: c.foodId,
+                expanded: false,
+             };
+             foodComp.macros = getMacros(foodComp);
+             return foodComp;
+        });
+    }
+
+    currentWeek.value.days[selectedDay.value].push(newPlanItem);
+    dialog.value.isOpen = false;
+}
+
+function removeItem(itemToRemove) {
+    const dayPlan = currentDayPlan.value;
+    const index = dayPlan.findIndex(item => item.id === itemToRemove.id);
+    if (index > -1) dayPlan.splice(index, 1);
+}
+
+function addWeek() {
+    if (!client.value?.program) return;
+    const nextWeekNumber = client.value.program.length + 1;
+    client.value.program.push({
+        weekNumber: nextWeekNumber,
+        waterTargetMl: 2500,
+        days: { monday: [], tuesday: [], wednesday: [], thursday: [], friday: [], saturday: [], sunday: [] }
+    });
+    selectedWeekIndex.value = client.value.program.length - 1;
+}
+
+function copyDay() {
+    clipboard.value = { type: 'day', data: JSON.parse(JSON.stringify(currentDayPlan.value)) };
+    snackbar.value = { show: true, text: 'Day copied!' };
+}
+
+function pasteDay() {
+    if (!clipboard.value || clipboard.value.type !== 'day') {
+        snackbar.value = { show: true, text: 'No day to paste!' };
+        return;
+    }
+    const pastedItems = JSON.parse(JSON.stringify(clipboard.value.data)).map(item => ({
+        ...item,
+        id: Date.now() + Math.random(),
+    }));
+    currentWeek.value.days[selectedDay.value] = pastedItems;
+    snackbar.value = { show: true, text: 'Day pasted!' };
+}
+
+function copyItem(itemToCopy) {
+    clipboard.value = { type: 'item', data: JSON.parse(JSON.stringify(itemToCopy)) };
+    snackbar.value = { show: true, text: 'Item copied!' };
 }
 </script>
