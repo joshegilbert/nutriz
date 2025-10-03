@@ -1,3 +1,5 @@
+// src/layouts/DefaultLayout.vue (Original Version)
+
 <template>
   <v-app>
     <v-app-bar app color="primary" density="compact">
@@ -30,12 +32,6 @@
 
       <v-list density="compact" nav>
         <v-list-item
-          prepend-icon="mdi-view-dashboard"
-          title="Dashboard"
-          value="dashboard"
-          to="/dashboard"
-        ></v-list-item>
-        <v-list-item
           prepend-icon="mdi-account-group"
           title="Clients"
           value="clients"
@@ -43,15 +39,21 @@
         ></v-list-item>
         <v-list-item
           prepend-icon="mdi-food-apple"
+          title="Foods"
+          value="foods"
+          to="/foods"
+        ></v-list-item>
+        <v-list-item
+          prepend-icon="mdi-silverware"
+          title="Meals"
+          value="meals"
+          to="/meals"
+        ></v-list-item>
+        <v-list-item
+          prepend-icon="mdi-receipt-text"
           title="Recipes"
           value="recipes"
           to="/recipes"
-        ></v-list-item>
-        <v-list-item
-          prepend-icon="mdi-information"
-          title="About"
-          value="about"
-          to="/about"
         ></v-list-item>
       </v-list>
     </v-navigation-drawer>
