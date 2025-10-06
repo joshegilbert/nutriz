@@ -61,7 +61,7 @@ import { useDataStore } from "@/stores/useDataStore";
 import { storeToRefs } from "pinia";
 
 const MealCalendar = defineAsyncComponent(() =>
-  import("@/components/MealCalendar.vue")
+  import("@/components/MealCalendar/index.vue")   
 );
 const MealCalendarMonth = defineAsyncComponent(() =>
   import("@/components/MealCalendarMonth.vue")
@@ -71,7 +71,8 @@ const route = useRoute();
 const dataStore = useDataStore();
 const { clients } = storeToRefs(dataStore);
 
-const viewMode = ref("month");
+const viewMode = ref("week");
+
 const selectedDate = ref(new Date());
 
 const client = computed(() =>

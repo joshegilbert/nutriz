@@ -1,0 +1,189 @@
+🧠 Big Picture
+
+The meal planner is built like a nutrition dashboard.
+It’s organized into different Vue files that each handle one clear job — kind of like “apps” within the main app.
+
+Each part connects through Pinia, which acts like the central “brain” that stores all foods, meals, recipes, and client programs.
+
+🏗️ Overall Flow (Simple Terms)
+
+The sidebar shows the week of meals, with tabs for future tools (like “Recipes” and “AI Chat”).
+
+When you click a day in the sidebar, it opens that day’s editor.
+
+The day editor shows meals and macros for that specific day, and lets you edit, add, or remove items.
+
+The data store (Pinia) keeps everything in sync — it’s like the shared nutrition database.
+
+Everything updates live on-screen — no page reloads, just smooth changes.
+
+🗂️ Folder: src/components/MealCalendar/
+
+Here’s what each file does and how it connects:
+
+1. index.vue — 🧭 The Main Controller
+
+This is the “home base” for the entire meal calendar.
+
+It shows two main sections:
+
+The sidebar (week list + tabs)
+
+The day editor (edit meals, macros, etc.)
+
+It controls which day is selected and sends data down to the right component.
+
+Think of this file as the conductor of the orchestra.
+
+2. WeekSidebar.vue — 📅 The Weekly Overview
+
+Shows a list of all 7 (or 14) days in the client’s program.
+
+Displays quick macro summaries for each day (like total calories, protein, etc.).
+
+Lets you select a day to edit, copy, and paste meals from one day to another.
+
+Connected to index.vue via events (when you click a day, index.vue listens and opens that day).
+
+3. DayEditor.vue — ✏️ Where the Nutritionist Works
+
+Opens up the selected day.
+
+Shows each meal time (Breakfast, Lunch, Dinner, Snacks, etc.).
+
+Lets you add or remove items, track totals, and edit macros manually.
+
+Pulls food and recipe data from the shared store.
+
+Includes the DailySummary section at the bottom.
+
+4. MealTimeBlock.vue — 🍽️ A Single Meal Section
+
+Represents one specific meal (like “Lunch” or “Dinner”).
+
+Displays all foods and recipes assigned to that meal.
+
+Has an Add button that opens the food picker (AddItemDialog.vue).
+
+Automatically calculates the meal’s macros.
+
+5. AddItemDialog.vue — ➕ Add Food or Recipe Popup
+
+The pop-up window where the nutritionist searches and adds foods, meals, or recipes.
+
+Pulls options from the main database (useDataStore).
+
+Future-ready for search filters, quantity editing, and live macro updates.
+
+6. DailySummary.vue — 📊 Totals for the Day
+
+Shows total calories, protein, carbs, and fat.
+
+Lets the nutritionist override the auto totals (e.g., if they want a specific macro goal).
+
+Has a reset button to return to calculated values.
+
+7. WeekSummary.vue — 📅 Totals for the Entire Week (Optional)
+
+(Currently simple, can be expanded later.)
+
+Will eventually display full-week averages, macro targets, and progress.
+
+8. utils/ — ⚙️ Helper Functions
+
+Contains small scripts for calculating totals and organizing data.
+
+Keeps the math and logic separate from the visual files.
+
+Makes the app faster and easier to maintain.
+
+9. Pinia Store (useDataStore.js) — 🧩 The Master Database
+
+Holds all the data:
+
+Foods
+
+Meals
+
+Recipes
+
+Clients and their meal programs
+
+Every part of the system pulls and updates info from here.
+
+Like a digital filing cabinet where everything stays synced.
+
+🔄 How They Work Together
+useDataStore.js
+       ⬇
+  index.vue
+   ├── WeekSidebar.vue → lists the days
+   │        ⬇
+   │   selectDay() → tells index.vue which to open
+   │
+   └── DayEditor.vue → opens chosen day
+           ├── MealTimeBlock.vue → shows each meal
+           │        └── AddItemDialog.vue → adds foods
+           └── DailySummary.vue → shows total macros
+
+
+Everything flows from top to bottom visually,
+but data flows both ways — the store keeps everything connected.
+
+
+
+                ┌────────────────────────────┐
+                │   📦 useDataStore.js        │
+                │----------------------------│
+                │  • Foods                   │
+                │  • Meals                   │
+                │  • Recipes                 │
+                │  • Clients + Programs      │
+                └────────────┬───────────────┘
+                             │
+                             ▼
+                 ┌────────────────────────┐
+                 │   index.vue (Main)      │
+                 │-------------------------│
+                 │  Controls whole layout  │
+                 │  ↳ Sidebar + Editor     │
+                 └──────────┬──────────────┘
+                            │
+        ┌───────────────────┴───────────────────┐
+        │                                       │
+        ▼                                       ▼
+┌────────────────────────┐           ┌────────────────────────┐
+│ 📅 WeekSidebar.vue      │           │ ✏️ DayEditor.vue        │
+│-------------------------│           │------------------------│
+│  • Shows list of days   │           │  • Displays selected   │
+│  • Click to open a day  │           │    day's meals         │
+│  • Copy / paste days    │           │  • Editable macros     │
+│  • Tabs: Week / Recipes │           │  • Uses DailySummary   │
+│    / AI Chat            │           │                        │
+└───────────┬─────────────┘           └─────────┬──────────────┘
+            │                                   │
+            ▼                                   ▼
+ ┌──────────────────────────┐        ┌──────────────────────────┐
+ │  📊 WeekSummary.vue       │        │ 🍽️ MealTimeBlock.vue     │
+ │  (optional totals view)  │        │  • One meal per block    │
+ │                          │        │  • Add / remove items    │
+ │                          │        │  • Opens AddItemDialog   │
+ └──────────────────────────┘        └────────────┬─────────────┘
+                                                  │
+                                                  ▼
+                                     ┌────────────────────────┐
+                                     │ ➕ AddItemDialog.vue    │
+                                     │------------------------│
+                                     │  • Search & add foods  │
+                                     │  • Pulls from store    │
+                                     │  • Updates macros live │
+                                     └────────────────────────┘
+
+                                     ▼
+                          ┌────────────────────────┐
+                          │ 📊 DailySummary.vue     │
+                          │------------------------│
+                          │  • Daily totals        │
+                          │  • Override / reset    │
+                          │  • Clean summary UI    │
+                          └────────────────────────┘

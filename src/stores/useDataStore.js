@@ -71,8 +71,8 @@ export const useDataStore = defineStore("data", () => {
                   items: [
                     {
                       id: 1,
-                      type: "food",       // could also be "meal" or "recipe"
-                      sourceId: 201,      // links to meals DB
+                      type: "food",      // could also be "meal" or "recipe"
+                      sourceId: 201,     // links to meals DB
                       amount: 1,
                       macros: {
                         calories: 300,
@@ -100,6 +100,50 @@ export const useDataStore = defineStore("data", () => {
       ]
     }
   ]);
+
+  // --- HELPER: ensure macros + macrosSource exist everywhere ---
+  function initializeProgramData(clients) {
+    for (const client of clients) {
+      if (!client.programs) continue;
+
+      for (const program of client.programs) {
+        if (!program.days) continue;
+
+        for (const day of program.days) {
+          // Ensure day-level macros
+          if (!day.macros) {
+            day.macros = { calories: 0, protein: 0, carbs: 0, fat: 0 };
+          }
+          if (!day.macrosSource) {
+            day.macrosSource = "auto";
+          }
+
+          for (const meal of day.meals || []) {
+            // Ensure meal-level macros
+            if (!meal.macros) {
+              meal.macros = { calories: 0, protein: 0, carbs: 0, fat: 0 };
+            }
+            if (!meal.macrosSource) {
+              meal.macrosSource = "auto";
+            }
+
+            for (const item of meal.items || []) {
+              // Ensure item-level macros + macrosSource
+              if (!item.macros) {
+                item.macros = { calories: 0, protein: 0, carbs: 0, fat: 0 };
+              }
+              if (!item.macrosSource) {
+                item.macrosSource = "auto";
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // --- RUN INITIALIZER ONCE ---
+  initializeProgramData(clients.value);
 
   // --- RETURN REACTIVE DATA ---
   return { foods, meals, recipes, clients };
