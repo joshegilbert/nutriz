@@ -1,5 +1,6 @@
 <template>
-  <v-container>
+  <!-- Make the container fluid and give more horizontal padding -->
+  <v-container fluid class="client-detail-view px-8 py-4">
     <div v-if="!client">
       <p>Loading client details...</p>
     </div>
@@ -7,7 +8,7 @@
       <!-- Header -->
       <v-row>
         <v-col cols="12">
-          <div class="d-flex align-center mb-4">
+          <div class="d-flex align-center mb-2">
             <v-btn to="/clients" icon="mdi-arrow-left" variant="text" class="mr-2"></v-btn>
             <h1 class="text-h4">{{ client.name }}</h1>
             <v-chip
@@ -38,21 +39,26 @@
       </v-row>
 
       <!-- Calendar Rendering -->
-      <MealCalendar
-        v-if="viewMode === 'week'"
-        :client-id="client.id"
-        :initial-date="selectedDate"
-        @back-to-month="viewMode = 'month'"
-      />
-      <MealCalendarMonth
-        v-else
-        :client-id="client.id"
-        :program-id="client.programs[0].id"
-        @open-week="openWeekView"
-      />
+      <v-row justify="center">
+        <v-col cols="12" xl="10" lg="11" md="12">
+          <MealCalendar
+            v-if="viewMode === 'week'"
+            :client-id="client.id"
+            :initial-date="selectedDate"
+            @back-to-month="viewMode = 'month'"
+          />
+          <MealCalendarMonth
+            v-else
+            :client-id="client.id"
+            :program-id="client.programs[0].id"
+            @open-week="openWeekView"
+          />
+        </v-col>
+      </v-row>
     </div>
   </v-container>
 </template>
+
 
 <script setup>
 import { ref, computed, defineAsyncComponent } from "vue";
@@ -84,3 +90,25 @@ function openWeekView(date) {
   viewMode.value = "week";
 }
 </script>
+
+<style scoped>
+.client-detail-view {
+  background-color: #f8f9fb;
+  min-height: 100vh;
+}
+
+.client-detail-view h1 {
+  font-weight: 600;
+}
+
+.v-btn-toggle {
+  background-color: #f5f5f5;
+  border-radius: 8px;
+}
+
+.v-btn-toggle .v-btn--active {
+  background-color: #1976d2;
+  color: white;
+}
+</style>
+

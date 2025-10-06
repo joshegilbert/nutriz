@@ -75,7 +75,11 @@ Pulls options from the main database (useDataStore).
 
 Future-ready for search filters, quantity editing, and live macro updates.
 
-6. DailySummary.vue — 📊 Totals for the Day
+6. EditItemDialog.vue — ✏️ Edit Item Popup
+
+A dialog for editing the details of an existing item in a meal, such as its amount or macros.
+
+7. DailySummary.vue — 📊 Totals for the Day
 
 Shows total calories, protein, carbs, and fat.
 
@@ -83,13 +87,13 @@ Lets the nutritionist override the auto totals (e.g., if they want a specific ma
 
 Has a reset button to return to calculated values.
 
-7. WeekSummary.vue — 📅 Totals for the Entire Week (Optional)
+8. WeekSummary.vue — 📅 Totals for the Entire Week (Optional)
 
 (Currently simple, can be expanded later.)
 
 Will eventually display full-week averages, macro targets, and progress.
 
-8. utils/ — ⚙️ Helper Functions
+9. utils/ — ⚙️ Helper Functions
 
 Contains small scripts for calculating totals and organizing data.
 
@@ -97,7 +101,7 @@ Keeps the math and logic separate from the visual files.
 
 Makes the app faster and easier to maintain.
 
-9. Pinia Store (useDataStore.js) — 🧩 The Master Database
+10. Pinia Store (useDataStore.js) — 🧩 The Master Database
 
 Holds all the data:
 
@@ -123,7 +127,8 @@ useDataStore.js
    │
    └── DayEditor.vue → opens chosen day
            ├── MealTimeBlock.vue → shows each meal
-           │        └── AddItemDialog.vue → adds foods
+           │        ├── AddItemDialog.vue → adds foods
+           │        └── EditItemDialog.vue → edits foods
            └── DailySummary.vue → shows total macros
 
 
@@ -168,16 +173,18 @@ but data flows both ways — the store keeps everything connected.
  │  (optional totals view)  │        │  • One meal per block    │
  │                          │        │  • Add / remove items    │
  │                          │        │  • Opens AddItemDialog   │
+ │                          │        │  • Opens EditItemDialog  │
  └──────────────────────────┘        └────────────┬─────────────┘
                                                   │
-                                                  ▼
-                                     ┌────────────────────────┐
-                                     │ ➕ AddItemDialog.vue    │
-                                     │------------------------│
-                                     │  • Search & add foods  │
-                                     │  • Pulls from store    │
-                                     │  • Updates macros live │
-                                     └────────────────────────┘
+                                     ┌────────────┼────────────────┐
+                                     │            │                │
+                                     ▼            ▼                ▼
+                          ┌────────────────────┐ ┌────────────────────┐
+                          │ ➕ AddItemDialog.vue │ │ ✏️ EditItemDialog.vue │
+                          │--------------------│ │--------------------│
+                          │ • Search & add     │ │ • Edit item amount │
+                          │ • Pulls from store │ │ • Edit item macros │
+                          └────────────────────┘ └────────────────────┘
 
                                      ▼
                           ┌────────────────────────┐

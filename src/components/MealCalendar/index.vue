@@ -1,113 +1,96 @@
 <template>
-  <div class="meal-calendar-container">
-    <!-- Sidebar -->
-    <aside class="sidebar">
-      <WeekSidebar
-        :program="currentProgram"
-        :selected-date="selectedDate"
-        :copied-day="copiedDay"
-        @select-day="selectDay"
-        @copy-day="copyDay"
-        @paste-day="pasteDay"
-      />
-    </aside>
+  <v-container fluid class="pa-4 meal-calendar" :client-id="clientId">
+    <v-row no-gutters>
+      <!-- Sidebar: week days -->
+      <v-col cols="12" md="3">
+        <WeekSidebar
+          v-if="program"
+          :program="program"
+          :selected-date="selectedDay"
+          @selectDay="selectDay"
+          @updateProgram="updateProgram"
+        />
+      </v-col>
 
-    <!-- Day Editor -->
-    <main class="day-editor">
-      <DayEditor
-        v-if="selectedDay"
-        :day="selectedDay"
-        :foods="foods"
-        :meals="meals"
-        :recipes="recipes"
-      />
-      <div v-else class="empty-state">Select a day to start editing</div>
-    </main>
-  </div>
+      <!-- Main Editor -->
+      <v-col cols="12" md="9">
+        <DayEditor
+          v-if="selectedDay"
+          :day="selectedDay"
+          :foods="foods"
+          :meals="meals"
+          :recipes="recipes"
+          @updateDay="updateDay"
+        />
+        <div v-else class="text-center pa-6 text-grey">
+          Select a day to begin editing
+        </div>
+      </v-col>
+    </v-row>
+  </v-container>
 </template>
 
-
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import { useDataStore } from "@/stores/useDataStore";
-import { storeToRefs } from "pinia";
 import WeekSidebar from "./WeekSidebar.vue";
 import DayEditor from "./DayEditor.vue";
 
+// --- Props ---
 const props = defineProps({
   clientId: { type: Number, required: true },
-  initialDate: { type: Date, required: true },
+  initialDate: { type: Date, default: () => new Date() },
 });
 
-const dataStore = useDataStore();
-const { clients, foods, meals, recipes } = storeToRefs(dataStore);
+const store = useDataStore();
 
-const selectedDate = ref(props.initialDate);
-const copiedDay = ref(null);
+// --- Reactive state ---
+const program = ref(null);
+const selectedDay = ref(null);
 
-const client = computed(() =>
-  clients.value.find((c) => c.id === props.clientId)
-);
-const currentProgram = computed(() => client.value?.programs[0]);
+// --- Load Data ---
+async function loadData() {
+  const data = await store.getProgramByClientId(props.clientId);
+  program.value = data;
 
-const selectedDay = computed(() =>
-  currentProgram.value?.days.find(
-    (d) => d.date === selectedDate.value.toISOString().split("T")[0]
-  )
-);
-
-function selectDay(date) {
-  selectedDate.value = new Date(date);
+  // auto-select today's date (or first day if none)
+  selectedDay.value = program.value?.days?.find(
+    (d) => new Date(d.date).toDateString() === props.initialDate.toDateString()
+  ) || program.value?.days?.[0];
 }
 
-function copyDay() {
-  copiedDay.value = selectedDay.value ? structuredClone(selectedDay.value) : null;
+loadData();
+
+// --- Data from store ---
+const foods = computed(() => store.foods);
+const meals = computed(() => store.meals);
+const recipes = computed(() => store.recipes);
+
+// --- Select Day from Sidebar ---
+function selectDay(day) {
+  selectedDay.value = day;
 }
 
-function pasteDay() {
-  if (!copiedDay.value || !selectedDay.value) return;
-  selectedDay.value.meals = structuredClone(copiedDay.value.meals);
+// --- Update a Single Day ---
+function updateDay(updatedDay) {
+  // Find and replace the correct day in the program
+  const dayIndex = program.value.days.findIndex(
+    (d) => d.date === updatedDay.date
+  );
+  if (dayIndex !== -1) {
+    program.value.days[dayIndex] = updatedDay;
+  }
+
+  // Sync with store
+  store.updateProgram(program.value);
+
+  // Keep selectedDay reactive
+  selectedDay.value = updatedDay;
+}
+
+// --- Update Program (used for copy/paste) ---
+function updateProgram(updatedProgram) {
+  program.value = updatedProgram;
+  store.updateProgram(updatedProgram);
 }
 </script>
-
-
-<style scoped>
-.meal-calendar-container {
-  display: flex;
-  height: 100%;
-  overflow: hidden;
-}
-
-/* Sidebar */
-.sidebar {
-  width: 280px;
-  border-right: 1px solid #e0e0e0;
-  background-color: #fff;
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-}
-
-/* Day Editor (main view) */
-.day-editor {
-  flex: 1;
-  padding: 16px 24px;
-  overflow-y: auto;
-  background-color: #fafafa;
-}
-
-/* Empty state */
-.empty-state {
-  color: #999;
-  text-align: center;
-  margin-top: 100px;
-  font-size: 1rem;
-}
-
-/* Ensure sidebar tabs don’t push content down */
-.sidebar .v-tabs {
-  margin: 0 !important;
-  padding: 0 !important;
-  min-height: 36px !important;
-}
-</style>

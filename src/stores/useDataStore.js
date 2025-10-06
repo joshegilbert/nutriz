@@ -1,56 +1,66 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
+import { toRaw } from "vue";
 
 export const useDataStore = defineStore("data", () => {
-  // --- DATABASE TIER 1: FOODS ---
+  // ---------------------------------------------------------------------------
+  //  DATA
+  // ---------------------------------------------------------------------------
   const foods = ref([
     {
-      id: 101, brand: "Fage", name: "Total 2% Greek Yogurt",
-      servingSize: 1, servingUnit: "170g container",
-      macrosPerServing: { calories: 150, protein: 20, carbs: 7, fat: 4, fiber: 0 }
+      id: 101,
+      brand: "Fage",
+      name: "Total 2% Greek Yogurt",
+      servingSize: 1,
+      servingUnit: "170g container",
+      macrosPerServing: { calories: 150, protein: 20, carbs: 7, fat: 4, fiber: 0 },
     },
     {
-      id: 102, brand: "Kirkland Signature", name: "Organic Berries",
-      servingSize: 1, servingUnit: "cup",
-      macrosPerServing: { calories: 70, protein: 1, carbs: 17, fat: 0.5, fiber: 4 }
+      id: 102,
+      brand: "Kirkland Signature",
+      name: "Organic Berries",
+      servingSize: 1,
+      servingUnit: "cup",
+      macrosPerServing: { calories: 70, protein: 1, carbs: 17, fat: 0.5, fiber: 4 },
     },
     {
-      id: 103, brand: "Nature Valley", name: "Protein Chewy Bars",
-      servingSize: 1, servingUnit: "bar",
-      macrosPerServing: { calories: 190, protein: 10, carbs: 14, fat: 12, fiber: 5 }
+      id: 103,
+      brand: "Nature Valley",
+      name: "Protein Chewy Bars",
+      servingSize: 1,
+      servingUnit: "bar",
+      macrosPerServing: { calories: 190, protein: 10, carbs: 14, fat: 12, fiber: 5 },
     },
     {
-      id: 104, brand: "Generic", name: "Chicken Breast",
-      servingSize: 100, servingUnit: "g",
-      macrosPerServing: { calories: 165, protein: 31, carbs: 0, fat: 3.6, fiber: 0 }
-    }
+      id: 104,
+      brand: "Generic",
+      name: "Chicken Breast",
+      servingSize: 100,
+      servingUnit: "g",
+      macrosPerServing: { calories: 165, protein: 31, carbs: 0, fat: 3.6, fiber: 0 },
+    },
   ]);
 
-  // --- DATABASE TIER 2: MEALS ---
   const meals = ref([
     {
       id: 201,
       name: "Yogurt Bowl",
       components: [
         { foodId: 101, amount: 1 },
-        { foodId: 102, amount: 0.5 }
-      ]
-    }
+        { foodId: 102, amount: 0.5 },
+      ],
+    },
   ]);
 
-  // --- DATABASE TIER 3: RECIPES ---
   const recipes = ref([
     {
       id: 301,
       name: "Simple Grilled Chicken",
       instructions: "1. Season chicken breast. 2. Grill until cooked through.",
-      components: [
-        { type: "food", foodId: 104, amount: 1.5 } // 150g
-      ]
-    }
+      components: [{ type: "food", foodId: 104, amount: 1.5 }],
+    },
   ]);
 
-  // --- CLIENT DATA ---
   const clients = ref([
     {
       id: 1,
@@ -61,90 +71,129 @@ export const useDataStore = defineStore("data", () => {
           id: 1,
           clientId: 1,
           startDate: "2025-10-02",
-          length: 14,
-          days: [
-            {
-              date: "2025-10-02",
-              meals: [
-                {
-                  mealTime: "Breakfast",
-                  items: [
-                    {
-                      id: 1,
-                      type: "food",      // could also be "meal" or "recipe"
-                      sourceId: 201,     // links to meals DB
-                      amount: 1,
-                      macros: {
-                        calories: 300,
-                        protein: 20,
-                        carbs: 40,
-                        fat: 10
-                      }
-                    }
-                  ]
-                },
-                { mealTime: "Lunch", items: [] }
-              ]
-            },
-            {
-              date: "2025-10-03",
-              meals: [
-                { mealTime: "Breakfast", items: [] },
-                { mealTime: "Lunch", items: [] },
-                { mealTime: "Dinner", items: [] },
-                { mealTime: "Snacks", items: [] }
-              ]
-            }
-          ]
-        }
-      ]
-    }
+          length: 7,
+          days: [],
+        },
+      ],
+    },
   ]);
 
-  // --- HELPER: ensure macros + macrosSource exist everywhere ---
-  function initializeProgramData(clients) {
-    for (const client of clients) {
-      if (!client.programs) continue;
+  // ---------------------------------------------------------------------------
+  //  HELPERS
+  // ---------------------------------------------------------------------------
+  function findProgram(programId) {
+    for (const client of clients.value) {
+      const program = client.programs.find((p) => p.id === programId);
+      if (program) return program;
+    }
+    return null;
+  }
 
+  function recalcMealTotals(meal) {
+    const totals = { calories: 0, protein: 0, carbs: 0, fat: 0 };
+    for (const item of meal.items) {
+      totals.calories += item.macros?.calories || 0;
+      totals.protein += item.macros?.protein || 0;
+      totals.carbs += item.macros?.carbs || 0;
+      totals.fat += item.macros?.fat || 0;
+    }
+    meal.macros = totals;
+  }
+
+  function recalcDayTotals(day) {
+    const totals = { calories: 0, protein: 0, carbs: 0, fat: 0 };
+    for (const meal of day.meals) {
+      recalcMealTotals(meal);
+      totals.calories += meal.macros.calories;
+      totals.protein += meal.macros.protein;
+      totals.carbs += meal.macros.carbs;
+      totals.fat += meal.macros.fat;
+    }
+    day.macros = totals;
+  }
+
+  function initializeProgramData() {
+    for (const client of clients.value) {
       for (const program of client.programs) {
-        if (!program.days) continue;
+        const start = new Date(program.startDate);
+        program.days = [];
 
-        for (const day of program.days) {
-          // Ensure day-level macros
-          if (!day.macros) {
-            day.macros = { calories: 0, protein: 0, carbs: 0, fat: 0 };
-          }
-          if (!day.macrosSource) {
-            day.macrosSource = "auto";
-          }
+        for (let i = 0; i < program.length; i++) {
+          const date = new Date(start);
+          date.setDate(start.getDate() + i);
+          const isoDate = date.toISOString().split("T")[0];
 
-          for (const meal of day.meals || []) {
-            // Ensure meal-level macros
-            if (!meal.macros) {
-              meal.macros = { calories: 0, protein: 0, carbs: 0, fat: 0 };
-            }
-            if (!meal.macrosSource) {
-              meal.macrosSource = "auto";
-            }
-
-            for (const item of meal.items || []) {
-              // Ensure item-level macros + macrosSource
-              if (!item.macros) {
-                item.macros = { calories: 0, protein: 0, carbs: 0, fat: 0 };
-              }
-              if (!item.macrosSource) {
-                item.macrosSource = "auto";
-              }
-            }
-          }
+          program.days.push({
+            date: isoDate,
+            meals: [
+              { mealTime: "Breakfast", items: [] },
+              { mealTime: "Lunch", items: [] },
+              { mealTime: "Dinner", items: [] },
+              { mealTime: "Snacks", items: [] },
+            ],
+            macros: { calories: 0, protein: 0, carbs: 0, fat: 0 },
+            macrosSource: "auto",
+          });
         }
       }
     }
   }
 
-  // --- RUN INITIALIZER ONCE ---
-  initializeProgramData(clients.value);
+  initializeProgramData();
 
-  // --- RETURN REACTIVE DATA ---
-  return { foods, meals, recipes, clients };
+  // ---------------------------------------------------------------------------
+  //  ACTIONS
+  // ---------------------------------------------------------------------------
+  async function getProgramByClientId(clientId) {
+    const client = clients.value.find((c) => c.id === clientId);
+    return client ? client.programs[0] : null;
+  }
+
+  function updateProgram(updatedProgram) {
+    const client = clients.value.find((c) => c.id === updatedProgram.clientId);
+    if (!client) return;
+  
+    const index = client.programs.findIndex((p) => p.id === updatedProgram.id);
+    if (index !== -1) {
+      // Fix: convert from reactive proxy → plain object
+      client.programs[index] = JSON.parse(
+        JSON.stringify(toRaw(updatedProgram))
+      );
+    }
+  }
+
+  function calcMealTotals(meal) {
+    const totals = { calories: 0, protein: 0, carbs: 0, fat: 0 };
+    if (!meal || !meal.items) return totals;
+  
+    for (const item of meal.items) {
+      totals.calories += item.macros?.calories || 0;
+      totals.protein += item.macros?.protein || 0;
+      totals.carbs += item.macros?.carbs || 0;
+      totals.fat += item.macros?.fat || 0;
+    }
+  
+    totals.calories = Math.round(totals.calories);
+    totals.protein = +totals.protein.toFixed(1);
+    totals.carbs = +totals.carbs.toFixed(1);
+    totals.fat = +totals.fat.toFixed(1);
+  
+    return totals;
+  }
+  
+
+  // ---------------------------------------------------------------------------
+  //  RETURN
+  // ---------------------------------------------------------------------------
+  return {
+    foods,
+    meals,
+    recipes,
+    clients,
+    getProgramByClientId,
+    updateProgram,
+    recalcDayTotals,
+    calcMealTotals,
+    recalcMealTotals,
+  };
 });

@@ -1,176 +1,248 @@
 <template>
-  <div class="week-sidebar">
-    <!-- Sticky Top Nav Tabs -->
-    <v-tabs
-      v-model="activeTab"
-      class="sidebar-tabs"
-      density="compact"
-      align-tabs="center"
-    >
-      <v-tab value="week">Week</v-tab>
-      <v-tab value="recipes">Recipes</v-tab>
-      <v-tab value="ai">AI Chat</v-tab>
-    </v-tabs>
+  <v-card class="week-sidebar elevation-1 rounded-xl pa-4">
+    <!-- Week Navigation -->
+    <div class="week-nav d-flex align-center justify-space-between mb-3">
+      <v-btn
+        icon="mdi-chevron-left"
+        variant="text"
+        density="compact"
+        color="primary"
+        @click="prevWeek"
+        :disabled="currentWeekIndex === 0"
+      />
+      <div class="text-subtitle-2 font-weight-medium text-center week-range">
+        {{ weekRangeLabel }}
+      </div>
+      <v-btn
+        icon="mdi-chevron-right"
+        variant="text"
+        density="compact"
+        color="primary"
+        @click="nextWeek"
+        :disabled="currentWeekIndex === totalWeeks - 1"
+      />
+    </div>
 
-    <!-- Tab Content -->
-    <v-window v-model="activeTab" class="sidebar-content">
-      <!-- WEEK TAB -->
-      <v-window-item value="week">
-        <v-list density="compact">
-          <v-list-item
-            v-for="day in weekDays"
-            :key="day.iso"
-            class="day-item"
-            :class="{ selected: isSameDay(day.date, selectedDate) }"
-            @click="$emit('select-day', day.date)"
-          >
-            <v-list-item-title>{{ day.label }}</v-list-item-title>
-            <v-list-item-subtitle>
-              Cal: {{ dayTotals(day.date).calories }} ·
-              P: {{ dayTotals(day.date).protein }}g
-            </v-list-item-subtitle>
-          </v-list-item>
-        </v-list>
+    <v-divider class="mb-3" />
 
-        <!-- Copy/Paste Buttons -->
-        <div class="sidebar-actions">
-          <v-btn size="x-small" color="primary" @click="$emit('copy-day')">
-            Copy Day
-          </v-btn>
-          <v-btn
-            size="x-small"
-            color="secondary"
-            variant="outlined"
-            @click="$emit('paste-day')"
-          >
-            Paste
-          </v-btn>
+    <!-- Days List -->
+    <div class="day-list">
+      <v-sheet
+        v-for="day in visibleDays"
+        :key="day.date"
+        class="day-block rounded-lg pa-3 mb-3"
+        :class="{ active: selectedDate?.date === day.date }"
+        @click="$emit('selectDay', day)"
+        elevation="0"
+      >
+        <div class="d-flex justify-space-between align-center mb-2">
+          <div class="day-info">
+            <div class="day-name">
+              {{ format(parseISO(day.date), "EEEE") }}
+            </div>
+            <div class="day-date text-grey-darken-1">
+              {{ format(parseISO(day.date), "MMM d") }}
+            </div>
+          </div>
         </div>
-      </v-window-item>
 
-      <!-- RECIPES TAB -->
-      <v-window-item value="recipes">
-        <div class="placeholder">📖 Recipes coming soon...</div>
-      </v-window-item>
+        <v-divider class="my-2" />
 
-      <!-- AI TAB -->
-      <v-window-item value="ai">
-        <div class="placeholder">🤖 AI Chat Assistant coming soon...</div>
-      </v-window-item>
-    </v-window>
-  </div>
+        <div class="macro-table">
+          <div class="macro-row">
+            <span class="label">Calories</span>
+            <span class="value">{{ day.macros?.calories ?? 0 }}</span>
+          </div>
+          <div class="macro-row">
+            <span class="label">Protein</span>
+            <span class="value">{{ day.macros?.protein ?? 0 }} g</span>
+          </div>
+          <div class="macro-row">
+            <span class="label">Carbs</span>
+            <span class="value">{{ day.macros?.carbs ?? 0 }} g</span>
+          </div>
+          <div class="macro-row">
+            <span class="label">Fat</span>
+            <span class="value">{{ day.macros?.fat ?? 0 }} g</span>
+          </div>
+        </div>
+      </v-sheet>
+    </div>
+
+    <v-divider class="my-4" />
+
+    <!-- Copy / Paste Controls -->
+    <v-row no-gutters class="action-row">
+      <v-col cols="6" class="pr-1">
+        <v-btn
+          variant="outlined"
+          color="primary"
+          prepend-icon="mdi-content-copy"
+          size="small"
+          block
+          @click="copyDay"
+          :disabled="!selectedDate"
+        >
+          Copy
+        </v-btn>
+      </v-col>
+
+      <v-col cols="6" class="pl-1">
+        <v-btn
+          variant="flat"
+          color="secondary"
+          prepend-icon="mdi-content-paste"
+          size="small"
+          block
+          @click="pasteDay"
+          :disabled="!clipboardDay"
+        >
+          Paste
+        </v-btn>
+      </v-col>
+    </v-row>
+  </v-card>
 </template>
 
 <script setup>
 import { ref, computed } from "vue";
-import { format, isSameDay as isSameDayFn } from "date-fns";
+import { format, parseISO, addDays } from "date-fns";
 
 const props = defineProps({
   program: { type: Object, required: true },
-  selectedDate: { type: Date, required: true },
+  selectedDate: { type: Object, required: false, default: null },
 });
 
-const emit = defineEmits(["select-day", "copy-day", "paste-day"]);
+const emit = defineEmits(["selectDay", "updateProgram"]);
 
-const activeTab = ref("week");
+const clipboardDay = ref(null);
+const currentWeekIndex = ref(0);
+const daysPerWeek = 7;
 
-const weekDays = computed(() => {
-  return props.program.days.map((d) => ({
-    date: new Date(d.date),
-    iso: d.date,
-    label: format(new Date(d.date), "EEE, MMM d"),
-  }));
+// 🔢 Total weeks in the program
+const totalWeeks = computed(() =>
+  Math.ceil(props.program.days.length / daysPerWeek)
+);
+
+// 🗓️ Days shown in the current week
+const visibleDays = computed(() => {
+  const start = currentWeekIndex.value * daysPerWeek;
+  const end = start + daysPerWeek;
+  return props.program.days.slice(start, end);
 });
 
-function isSameDay(d1, d2) {
-  return isSameDayFn(new Date(d1), new Date(d2));
+// 📆 Display range label
+const weekRangeLabel = computed(() => {
+  if (!visibleDays.value.length) return "";
+  const start = parseISO(visibleDays.value[0].date);
+  const end = parseISO(visibleDays.value[visibleDays.value.length - 1].date);
+  return `${format(start, "MMM d")} – ${format(end, "MMM d")}`;
+});
+
+// ◀️ ▶️ Week navigation
+function prevWeek() {
+  if (currentWeekIndex.value > 0) currentWeekIndex.value--;
 }
 
-function dayTotals(date) {
-  const dayDate = date instanceof Date ? date : new Date(date);
-  const iso = dayDate.toISOString().split("T")[0];
-  const day = props.program.days.find((d) => d.date === iso);
-  if (!day) return { calories: 0, protein: 0, carbs: 0, fat: 0 };
+function nextWeek() {
+  if (currentWeekIndex.value < totalWeeks.value - 1) currentWeekIndex.value++;
+}
 
-  return day.meals.reduce(
-    (totals, meal) => {
-      meal.items.forEach((item) => {
-        totals.calories += item.macros?.calories || 0;
-        totals.protein += item.macros?.protein || 0;
-      });
-      return totals;
-    },
-    { calories: 0, protein: 0, carbs: 0, fat: 0 }
+// 🧩 Copy / Paste
+function copyDay() {
+  if (!props.selectedDate) return;
+  clipboardDay.value = JSON.parse(JSON.stringify(props.selectedDate));
+}
+
+function pasteDay() {
+  if (!clipboardDay.value || !props.selectedDate) return;
+
+  const dayIndex = props.program.days.findIndex(
+    (d) => d.date === props.selectedDate.date
   );
+  if (dayIndex === -1) return;
+
+  props.program.days[dayIndex].meals = JSON.parse(
+    JSON.stringify(clipboardDay.value.meals)
+  );
+  props.program.days[dayIndex].macros = JSON.parse(
+    JSON.stringify(clipboardDay.value.macros)
+  );
+
+  emit("updateProgram", props.program);
 }
 </script>
 
 <style scoped>
 .week-sidebar {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  border-right: 1px solid #eee;
-  background: #fff;
-}
-
-/* --- Sticky tab bar --- */
-.sidebar-tabs {
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  width: 100%;
+  max-width: 360px;
   background-color: #fafafa;
-  border-bottom: 1px solid #ddd;
-  min-height: 36px !important;
 }
 
-.v-tab {
-  min-height: 36px !important;
-  padding: 0 12px !important;
-  font-size: 0.85rem !important;
-  text-transform: none !important;
-  color: #555 !important;
-}
-
-.v-tab--selected {
-  color: #1976d2 !important;
-  background-color: #f0f6ff !important;
-  font-weight: 600 !important;
-}
-
-/* --- Sidebar content --- */
-.sidebar-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px;
-}
-
-/* --- Week list --- */
-.day-item {
-  cursor: pointer;
-  border-radius: 6px;
-  transition: background 0.2s ease;
-  margin-bottom: 2px;
-}
-
-.day-item.selected {
-  background-color: #e3f2fd !important;
+.week-nav {
   font-weight: 600;
+  color: #333;
 }
 
-/* --- Copy/paste buttons --- */
-.sidebar-actions {
+.week-range {
+  flex: 1;
+  text-align: center;
+}
+
+.day-list {
+  max-height: 600px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.day-block {
+  background-color: #fff;
+  border: 1px solid #eee;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.day-block:hover {
+  background-color: #f8faff;
+  border-color: #90caf9;
+}
+
+.day-block.active {
+  border-left: 4px solid #2196f3;
+  background-color: #e3f2fd;
+}
+
+.day-info .day-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #333;
+}
+
+.day-info .day-date {
+  font-size: 0.8rem;
+}
+
+.macro-table {
+  font-size: 0.8rem;
+}
+
+.macro-row {
   display: flex;
   justify-content: space-between;
-  padding: 8px;
-  border-top: 1px solid #eee;
+  padding: 2px 0;
 }
 
-/* --- Placeholder for future tabs --- */
-.placeholder {
-  padding: 16px;
-  text-align: center;
-  color: #999;
-  font-size: 0.9rem;
+.macro-row .label {
+  color: #777;
+}
+
+.macro-row .value {
+  font-weight: 600;
+  color: #333;
+}
+
+.action-row {
+  margin-top: 8px;
 }
 </style>

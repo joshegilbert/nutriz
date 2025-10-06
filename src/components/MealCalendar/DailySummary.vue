@@ -1,124 +1,132 @@
 <template>
-  <div class="daily-summary" :class="{ overridden: macrosSource === 'overridden' }">
-    <v-divider class="my-2" />
+  <v-card class="day-summary elevation-2 rounded-lg pa-4 mt-6">
+    <!-- Header -->
+    <v-card-title class="text-h6 font-weight-medium">
+      Daily Totals
+      <v-spacer></v-spacer>
 
-    <!-- Title -->
-    <div class="summary-header">
-      <span class="text-subtitle-2 font-weight-medium">Daily Totals</span>
+      <!-- Reset button -->
       <v-btn
         v-if="macrosSource === 'overridden'"
         icon="mdi-restore"
-        size="x-small"
         variant="text"
+        size="small"
         color="primary"
-        @click="emit('reset')"
+        @click="resetToAuto"
         title="Reset to auto-calculated totals"
       />
-    </div>
+    </v-card-title>
 
-    <!-- Macro Inputs -->
+    <v-divider class="my-2" />
+
+    <!-- Totals -->
     <v-row dense>
       <v-col cols="6" sm="3">
         <v-text-field
           v-model.number="editableMacros.calories"
-          label="Cal"
+          label="Calories"
+          type="number"
           density="compact"
           hide-details
-          type="number"
-          @change="emitOverride"
+          @change="emitManualUpdate"
         />
       </v-col>
 
       <v-col cols="6" sm="3">
         <v-text-field
           v-model.number="editableMacros.protein"
-          label="Protein"
-          suffix="g"
+          label="Protein (g)"
+          type="number"
           density="compact"
           hide-details
-          type="number"
-          @change="emitOverride"
+          @change="emitManualUpdate"
         />
       </v-col>
 
       <v-col cols="6" sm="3">
         <v-text-field
           v-model.number="editableMacros.carbs"
-          label="Carbs"
-          suffix="g"
+          label="Carbs (g)"
+          type="number"
           density="compact"
           hide-details
-          type="number"
-          @change="emitOverride"
+          @change="emitManualUpdate"
         />
       </v-col>
 
       <v-col cols="6" sm="3">
         <v-text-field
           v-model.number="editableMacros.fat"
-          label="Fat"
-          suffix="g"
+          label="Fat (g)"
+          type="number"
           density="compact"
           hide-details
-          type="number"
-          @change="emitOverride"
+          @change="emitManualUpdate"
         />
       </v-col>
     </v-row>
-  </div>
+  </v-card>
 </template>
 
 <script setup>
-import { reactive, watch } from "vue";
+import { ref, watch, computed } from "vue";
 
 const props = defineProps({
-  dayMacros: { type: Object, required: false, default: () => ({ calories: 0, protein: 0, carbs: 0, fat: 0 }) },
-  macrosSource: { type: String, default: "auto" },
+  day: { type: Object, required: true },
 });
 
-const emit = defineEmits(["override", "reset"]);
+const emit = defineEmits(["updateDay"]);
 
-const editableMacros = reactive({
-  calories: props.dayMacros?.calories ?? 0,
-  protein: props.dayMacros?.protein ?? 0,
-  carbs: props.dayMacros?.carbs ?? 0,
-  fat: props.dayMacros?.fat ?? 0,
-});
+// Make editable copy of macros
+const editableMacros = ref({ ...props.day.macros });
+const macrosSource = ref(props.day.macrosSource || "auto");
 
-// Keep editableMacros synced when props change
+// Watch for parent changes (sync down)
 watch(
-  () => props.dayMacros,
-  (newVal) => {
-    editableMacros.calories = newVal?.calories ?? 0;
-    editableMacros.protein = newVal?.protein ?? 0;
-    editableMacros.carbs = newVal?.carbs ?? 0;
-    editableMacros.fat = newVal?.fat ?? 0;
+  () => props.day.macros,
+  (newMacros) => {
+    editableMacros.value = { ...newMacros };
+    macrosSource.value = props.day.macrosSource || "auto";
   },
   { deep: true }
 );
 
-function emitOverride() {
-  emit("override", { ...editableMacros });
+// When user manually changes a field
+function emitManualUpdate() {
+  macrosSource.value = "overridden";
+  const updatedDay = {
+    ...props.day,
+    macros: { ...editableMacros.value },
+    macrosSource: "overridden",
+  };
+  emit("updateDay", updatedDay);
+}
+
+// Reset to auto-calculated totals
+function resetToAuto() {
+  const updatedDay = {
+    ...props.day,
+    macrosSource: "auto",
+  };
+  emit("updateDay", updatedDay);
 }
 </script>
 
 <style scoped>
-.daily-summary {
-  margin-top: 8px;
+.day-summary {
   background: #fafafa;
-  border-radius: 8px;
-  padding: 8px;
-  transition: background-color 0.2s ease;
 }
 
-.daily-summary.overridden {
-  background-color: #fffbe6; /* light yellow tint for overridden */
+.v-text-field {
+  font-size: 0.9rem;
 }
 
-.summary-header {
-  display: flex;
-  justify-content: space-between;
+.v-card-title {
   align-items: center;
-  margin-bottom: 4px;
+}
+
+.v-divider {
+  margin-top: 8px;
+  margin-bottom: 12px;
 }
 </style>
