@@ -88,9 +88,9 @@ import { storeToRefs } from "pinia";
 const route = useRoute();
 const dataStore = useDataStore();
 
-// Correctly get data and functions from the Pinia store
+// Access store helpers for lookups and macro calculations
 const { getItemDetails, calculateItemMacros } = dataStore;
-const { clients, foods } = storeToRefs(dataStore);
+const { clients } = storeToRefs(dataStore);
 
 const client = computed(() => {
   const clientId = Number(route.params.id);
@@ -118,13 +118,16 @@ const weeklyPlan = computed(() => {
     const meals = mealTimes.map(mealTime => {
       const itemsForMealtime = planForDay.filter(item => item.mealTime === mealTime);
       
-      const itemsWithDetails = itemsForMealtime.map(item => ({
-        ...item,
-        details: getItemDetails(item.type, item.id)
-      }));
+      const itemsWithDetails = itemsForMealtime.map(item => {
+        const details = getItemDetails(item.type, item.sourceId);
+        return {
+          ...item,
+          details: details || { name: "Unknown Item" },
+        };
+      });
 
       const totals = itemsWithDetails.reduce((acc, item) => {
-        const itemMacros = calculateItemMacros(item.type, item.id, item.amount);
+        const itemMacros = calculateItemMacros(item.type, item.sourceId, item.amount ?? 1);
         acc.calories += itemMacros.calories;
         acc.protein += itemMacros.protein;
         acc.carbs += itemMacros.carbs;
@@ -141,39 +144,73 @@ const weeklyPlan = computed(() => {
 
 // NEW: Fully implemented shoppingList computed property
 const shoppingList = computed(() => {
-    if (!client.value?.mealPlan) return [];
-    
-    const ingredientsMap = new Map();
+  if (!client.value?.mealPlan) return [];
 
-    // Helper function to break down any meal plan item into its base foods
-    function addComponentsToMap(type, id, quantity = 1) {
-        const item = getItemDetails(type, id);
-        if (!item) return;
+  const ingredientsMap = new Map();
 
-        if (type === 'food') {
-            const key = `${item.id}-${item.unit}`;
-            if (!ingredientsMap.has(key)) {
-                ingredientsMap.set(key, { ...item, amount: 0 });
-            }
-            ingredientsMap.get(key).amount += quantity;
-        } else if (item.ingredients) { // For meals and recipes
-            item.ingredients.forEach(ingredient => {
-              // Recursively add components, scaling by the parent item's quantity
-              addComponentsToMap('food', ingredient.foodId, ingredient.quantity * quantity);
-            });
-        } else if (item.components) { // For recipes that might directly list components (foods/meals)
-           item.components.forEach(component => {
-              addComponentsToMap(component.type, component.id, component.amount * quantity);
-           });
-        }
+  function addFoodToMap(food, quantity) {
+    if (!food) return;
+    const safeQuantity = Number(quantity);
+    if (!Number.isFinite(safeQuantity) || safeQuantity <= 0) return;
+    const key = `${food.id}-${food.servingUnit || "unit"}`;
+    if (!ingredientsMap.has(key)) {
+      ingredientsMap.set(key, {
+        id: food.id,
+        name: food.name,
+        amount: 0,
+        unit: food.servingUnit || "unit",
+      });
+    }
+    const entry = ingredientsMap.get(key);
+    entry.amount += safeQuantity;
+  }
+
+  function addComponentsToMap(type, id, quantity = 1) {
+    const safeQuantity = Number(quantity);
+    if (!type || id == null || !Number.isFinite(safeQuantity) || safeQuantity <= 0) return;
+
+    if (type === "food") {
+      const food = getItemDetails("food", id);
+      addFoodToMap(food, safeQuantity);
+      return;
     }
 
-    // Iterate over the entire weekly plan
-    Object.values(client.value.mealPlan).flat().forEach(planItem => {
-        addComponentsToMap(planItem.type, planItem.id, planItem.amount);
-    });
+    const item = getItemDetails(type, id);
+    if (!item) return;
 
-    return Array.from(ingredientsMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+    const components = item.components || item.ingredients || [];
+    components.forEach((component) => {
+      const baseQuantity = Number(component.amount ?? component.quantity ?? 1);
+      const normalisedBase = Number.isFinite(baseQuantity) && baseQuantity > 0 ? baseQuantity : 0;
+      const componentQuantity = normalisedBase > 0 ? normalisedBase * safeQuantity : safeQuantity;
+
+      if (componentQuantity <= 0) {
+        return;
+      }
+
+      if (component.customName) {
+        return;
+      }
+
+      if (component.type && component.sourceId != null) {
+        addComponentsToMap(component.type, component.sourceId, componentQuantity);
+        return;
+      }
+
+      const foodId = component.foodId ?? component.sourceId ?? component.id;
+      if (foodId != null) {
+        addComponentsToMap("food", foodId, componentQuantity);
+      }
+    });
+  }
+
+  Object.values(client.value.mealPlan).flat().forEach((planItem) => {
+    const amount = Number(planItem.amount ?? 1);
+    const normalisedAmount = Number.isFinite(amount) ? amount : 1;
+    addComponentsToMap(planItem.type, planItem.sourceId, normalisedAmount);
+  });
+
+  return Array.from(ingredientsMap.values()).sort((a, b) => a.name.localeCompare(b.name));
 });
 
 
