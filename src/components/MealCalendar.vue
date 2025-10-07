@@ -8,14 +8,23 @@
       </div>
       <v-btn icon="mdi-chevron-right" variant="text" @click="nextWeek"></v-btn>
       <v-spacer></v-spacer>
+      <v-btn
+        size="small"
+        variant="text"
+        prepend-icon="mdi-calendar-month"
+        class="mr-2"
+        @click="emit('back-to-month')"
+      >
+        Month View
+      </v-btn>
       <v-btn size="small" color="primary" variant="tonal" @click="goToToday">Today</v-btn>
     </v-row>
 
     <!-- Scrollable Grid -->
     <div class="week-grid">
       <div
-        v-for="day in weekDays"
-        :key="day.date"
+        v-for="day in weekPlan"
+        :key="day.iso"
         class="day-column"
         :class="{ today: isToday(day.date) }"
       >
@@ -25,36 +34,36 @@
           <span class="text-caption text-grey">{{ formatDate(day.date) }}</span>
           <v-chip-group class="mt-1" density="compact">
             <v-chip size="x-small" color="grey-lighten-2" variant="flat">
-              Cal {{ getDailyTotals(day.date).calories }}
+              Cal {{ day.totals.calories }}
             </v-chip>
             <v-chip size="x-small" color="grey-lighten-2" variant="flat">
-              P {{ getDailyTotals(day.date).protein }}g
+              P {{ day.totals.protein }}g
             </v-chip>
             <v-chip size="x-small" color="grey-lighten-2" variant="flat">
-              C {{ getDailyTotals(day.date).carbs }}g
+              C {{ day.totals.carbs }}g
             </v-chip>
             <v-chip size="x-small" color="grey-lighten-2" variant="flat">
-              F {{ getDailyTotals(day.date).fat }}g
+              F {{ day.totals.fat }}g
             </v-chip>
           </v-chip-group>
         </div>
 
         <!-- Meals -->
         <div
-          v-for="mealTime in mealTimes"
-          :key="mealTime"
+          v-for="meal in day.meals"
+          :key="meal.mealTime"
           class="meal-section"
         >
-          <div class="meal-title" :class="mealColor(mealTime)">
-            {{ mealTime }}
+          <div class="meal-title" :class="mealColor(meal.mealTime)">
+            {{ meal.mealTime }}
           </div>
 
-          <div v-if="getItems(day.date, mealTime).length === 0" class="text-caption text-grey pa-1">
+          <div v-if="meal.items.length === 0" class="text-caption text-grey pa-1">
             No items
           </div>
 
           <div
-            v-for="item in getItems(day.date, mealTime)"
+            v-for="item in meal.items"
             :key="item.id"
             class="item-card"
           >
@@ -72,7 +81,7 @@
               size="x-small"
               variant="text"
               color="grey"
-              @click="removeItem(day.date, item)"
+              @click="removeItem(day.iso, meal.mealTime, item.id)"
             ></v-btn>
           </div>
 
@@ -81,7 +90,7 @@
             variant="text"
             prepend-icon="mdi-plus"
             class="add-btn"
-            @click="openAddItemDialog(day.date, mealTime)"
+            @click="openAddItemDialog(day.date, meal.mealTime)"
           >
             Add Item
           </v-btn>
@@ -92,8 +101,8 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
-import { useDataStore } from "@/stores/useDataStore";
+import { ref, computed, watch } from "vue";
+import { MEAL_TIMES, useDataStore } from "@/stores/useDataStore";
 import { storeToRefs } from "pinia";
 import {
   startOfWeek,
@@ -101,75 +110,147 @@ import {
   format,
   isToday as isTodayDate,
 } from "date-fns";
-import PlanItemCard from "./PlanItemCard.vue";
+
+const emit = defineEmits(["back-to-month"]);
 
 const props = defineProps({
   clientId: { type: Number, required: true },
+  initialDate: {
+    type: [Date, String],
+    default: () => new Date(),
+  },
 });
 
 const dataStore = useDataStore();
 const { clients, foods, meals, recipes } = storeToRefs(dataStore);
 
-const mealTimes = ["Breakfast", "Lunch", "Dinner", "Snacks"];
-const visibleWeekStart = ref(startOfWeek(new Date(), { weekStartsOn: 1 }));
+const mealTimes = MEAL_TIMES;
+
+const foodById = computed(() => {
+  const map = new Map();
+  foods.value.forEach((food) => {
+    map.set(food.id, food);
+  });
+  return map;
+});
+
+const mealById = computed(() => {
+  const map = new Map();
+  meals.value.forEach((meal) => {
+    map.set(meal.id, meal);
+  });
+  return map;
+});
+
+const recipeById = computed(() => {
+  const map = new Map();
+  recipes.value.forEach((recipe) => {
+    map.set(recipe.id, recipe);
+  });
+  return map;
+});
+
+function normalizeDate(value) {
+  if (!value) return new Date();
+  const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
+const visibleWeekStart = ref(
+  startOfWeek(normalizeDate(props.initialDate), { weekStartsOn: 1 })
+);
+
+watch(
+  () => props.initialDate,
+  (newValue) => {
+    visibleWeekStart.value = startOfWeek(normalizeDate(newValue), {
+      weekStartsOn: 1,
+    });
+  }
+);
 
 const client = computed(() =>
   clients.value.find((c) => c.id === props.clientId)
 );
-const currentProgram = computed(() => client.value?.programs[0]);
+const currentProgram = computed(() => client.value?.programs?.[0]);
+const currentProgramId = computed(() => currentProgram.value?.id ?? null);
 
-const weekDays = computed(() => {
+const programDaysByIso = computed(() => {
+  const map = new Map();
+  currentProgram.value?.days?.forEach((day) => {
+    map.set(day.date, day);
+  });
+  return map;
+});
+
+const zeroTotals = () => ({
+  calories: 0,
+  protein: 0,
+  carbs: 0,
+  fat: 0,
+});
+
+function aggregateMacros(items) {
+  return items.reduce((acc, item) => {
+    const macros = item.macros ?? zeroTotals();
+    acc.calories += macros.calories ?? 0;
+    acc.protein += macros.protein ?? 0;
+    acc.carbs += macros.carbs ?? 0;
+    acc.fat += macros.fat ?? 0;
+    return acc;
+  }, zeroTotals());
+}
+
+const weekPlan = computed(() => {
   const days = [];
   for (let i = 0; i < 7; i++) {
     const date = addDays(visibleWeekStart.value, i);
     const iso = format(date, "yyyy-MM-dd");
+    const programDay = programDaysByIso.value.get(iso);
+
+    const mealsForDay = mealTimes.map((mealTime) => {
+      const items =
+        programDay?.meals?.find((m) => m.mealTime === mealTime)?.items ?? [];
+      return {
+        mealTime,
+        items,
+        totals: aggregateMacros(items),
+      };
+    });
+
+    const dayTotals = mealsForDay.reduce((acc, meal) => {
+      acc.calories += meal.totals.calories;
+      acc.protein += meal.totals.protein;
+      acc.carbs += meal.totals.carbs;
+      acc.fat += meal.totals.fat;
+      return acc;
+    }, zeroTotals());
+
     days.push({
       date,
       iso,
-      label: format(date, "EEEE"), // Monday, Tuesday, etc.
+      label: format(date, "EEEE"),
+      meals: mealsForDay,
+      totals: dayTotals,
     });
   }
   return days;
 });
 
-function getItems(date, mealTime) {
-  const iso = format(date, "yyyy-MM-dd");
-  const programDay = currentProgram.value?.days.find((d) => d.date === iso);
-  return programDay?.meals.find((m) => m.mealTime === mealTime)?.items || [];
-}
-
 function getItemName(item) {
   if (item.type === "food") {
-    const f = foods.value.find((x) => x.id === item.sourceId);
+    const f = foodById.value.get(item.sourceId);
     return f ? f.name : "Unknown Food";
   }
   if (item.type === "meal") {
-    const m = meals.value.find((x) => x.id === item.sourceId);
+    const m = mealById.value.get(item.sourceId);
     return m ? m.name : "Unknown Meal";
   }
   if (item.type === "recipe") {
-    const r = recipes.value.find((x) => x.id === item.sourceId);
+    const r = recipeById.value.get(item.sourceId);
     return r ? r.name : "Unknown Recipe";
   }
   return "Unknown Item";
-}
-
-function getDailyTotals(date) {
-  const iso = format(date, "yyyy-MM-dd");
-  const programDay = currentProgram.value?.days.find((d) => d.date === iso);
-  if (!programDay) return { calories: 0, protein: 0, carbs: 0, fat: 0 };
-  return programDay.meals.reduce(
-    (totals, meal) => {
-      meal.items.forEach((item) => {
-        totals.calories += item.macros.calories;
-        totals.protein += item.macros.protein;
-        totals.carbs += item.macros.carbs;
-        totals.fat += item.macros.fat;
-      });
-      return totals;
-    },
-    { calories: 0, protein: 0, carbs: 0, fat: 0 }
-  );
 }
 
 function mealColor(mealTime) {
@@ -216,14 +297,16 @@ function openAddItemDialog(date, mealTime) {
   console.log("Add item to", mealTime, "on", date);
 }
 
-function removeItem(date, item) {
-  const iso = format(date, "yyyy-MM-dd");
-  const programDay = currentProgram.value?.days.find((d) => d.date === iso);
-  if (!programDay) return;
-  for (const meal of programDay.meals) {
-    const index = meal.items.findIndex((x) => x.id === item.id);
-    if (index !== -1) meal.items.splice(index, 1);
-  }
+function removeItem(dayIso, mealTime, itemId) {
+  if (!currentProgramId.value) return;
+
+  dataStore.removeProgramItem({
+    clientId: props.clientId,
+    programId: currentProgramId.value,
+    dayIso,
+    mealTime,
+    itemId,
+  });
 }
 </script>
 
