@@ -1,6 +1,13 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 
+export const MEAL_TIMES = Object.freeze([
+  "Breakfast",
+  "Lunch",
+  "Dinner",
+  "Snacks",
+]);
+
 export const useDataStore = defineStore("data", () => {
   // --- DATABASE TIER 1: FOODS ---
   const foods = ref([
@@ -102,5 +109,62 @@ export const useDataStore = defineStore("data", () => {
   ]);
 
   // --- RETURN REACTIVE DATA ---
-  return { foods, meals, recipes, clients };
+  function getClientById(clientId) {
+    return clients.value.find((client) => client.id === clientId);
+  }
+
+  function getProgramById(clientId, programId) {
+    const client = getClientById(clientId);
+    if (!client) return undefined;
+    return client.programs?.find((program) => program.id === programId);
+  }
+
+  function ensureMealsForDay(day) {
+    if (!day) return undefined;
+
+    if (!Array.isArray(day.meals)) {
+      day.meals = [];
+    }
+
+    MEAL_TIMES.forEach((mealTime) => {
+      if (!day.meals.some((meal) => meal.mealTime === mealTime)) {
+        day.meals.push({ mealTime, items: [] });
+      }
+    });
+
+    day.meals.sort(
+      (a, b) => MEAL_TIMES.indexOf(a.mealTime) - MEAL_TIMES.indexOf(b.mealTime)
+    );
+
+    return day;
+  }
+
+  function removeProgramItem({ clientId, programId, dayIso, mealTime, itemId }) {
+    const program = getProgramById(clientId, programId);
+    if (!program) return false;
+
+    const day = program.days?.find((entry) => entry.date === dayIso);
+    if (!day) return false;
+
+    ensureMealsForDay(day);
+    const meal = day.meals.find((entry) => entry.mealTime === mealTime);
+    if (!meal) return false;
+
+    const index = meal.items?.findIndex((item) => item.id === itemId) ?? -1;
+    if (index === -1) return false;
+
+    meal.items.splice(index, 1);
+    return true;
+  }
+
+  return {
+    foods,
+    meals,
+    recipes,
+    clients,
+    getClientById,
+    getProgramById,
+    ensureMealsForDay,
+    removeProgramItem,
+  };
 });
