@@ -2,6 +2,13 @@ import { defineStore } from "pinia";
 import { ref } from "vue";
 import { toRaw } from "vue";
 
+export const MEAL_TIMES = Object.freeze([
+  "Breakfast",
+  "Lunch",
+  "Dinner",
+  "Snacks",
+]);
+
 export const useDataStore = defineStore("data", () => {
   // ---------------------------------------------------------------------------
   //  DATA
