@@ -1,5 +1,6 @@
 <template>
-  <v-container>
+  <!-- Make the container fluid and give more horizontal padding -->
+  <v-container fluid class="client-detail-view px-8 py-4">
     <div v-if="!client">
       <p>Loading client details...</p>
     </div>
@@ -7,7 +8,7 @@
       <!-- Header -->
       <v-row>
         <v-col cols="12">
-          <div class="d-flex align-center mb-4">
+          <div class="d-flex align-center mb-2">
             <v-btn to="/clients" icon="mdi-arrow-left" variant="text" class="mr-2"></v-btn>
             <h1 class="text-h4">{{ client.name }}</h1>
             <v-chip
@@ -142,78 +143,27 @@
         </v-col>
       </v-row>
 
-      <!-- Upcoming Schedule -->
-      <v-row v-if="hasActiveProgram && upcomingDays.length" class="mb-6">
-        <v-col cols="12">
-          <v-card class="pa-4" elevation="1">
-            <div class="d-flex align-center mb-3">
-              <h2 class="text-h6 mb-0">Upcoming Schedule</h2>
-              <v-spacer></v-spacer>
-              <v-btn
-                size="small"
-                variant="text"
-                prepend-icon="mdi-calendar-week"
-                @click="openWeekView(upcomingDays[0].dateObj)"
-              >
-                Jump to Next Week
-              </v-btn>
-            </div>
-
-            <v-list density="comfortable">
-              <v-list-item
-                v-for="day in upcomingDays"
-                :key="day.date"
-                :title="formatDayTitle(day)"
-                :subtitle="upcomingDaySubtitle(day)"
-                class="upcoming-day-item"
-                @click="openWeekView(day.dateObj)"
-              >
-                <template #prepend>
-                  <v-avatar color="primary" variant="tonal" size="32">
-                    <span class="text-caption font-weight-medium">
-                      {{ formatMonthDay(day.dateObj) }}
-                    </span>
-                  </v-avatar>
-                </template>
-                <template #append>
-                  <v-icon color="primary" size="small">mdi-chevron-right</v-icon>
-                </template>
-              </v-list-item>
-            </v-list>
-          </v-card>
+      <!-- Calendar Rendering -->
+      <v-row justify="center">
+        <v-col cols="12" xl="10" lg="11" md="12">
+          <MealCalendar
+            v-if="viewMode === 'week'"
+            :client-id="client.id"
+            :initial-date="selectedDate"
+            @back-to-month="viewMode = 'month'"
+          />
+          <MealCalendarMonth
+            v-else
+            :client-id="client.id"
+            :program-id="client.programs[0].id"
+            @open-week="openWeekView"
+          />
         </v-col>
       </v-row>
-
-      <template v-if="hasActiveProgram">
-        <!-- View Toggle -->
-        <v-row class="mb-4">
-          <v-btn-toggle v-model="viewMode" mandatory>
-            <v-btn value="week" prepend-icon="mdi-calendar-week">Week View</v-btn>
-            <v-btn value="month" prepend-icon="mdi-calendar-month">Month View</v-btn>
-          </v-btn-toggle>
-        </v-row>
-
-        <!-- Calendar Rendering -->
-        <MealCalendar
-          v-if="viewMode === 'week'"
-          :client-id="client.id"
-          :initial-date="selectedDate"
-          @back-to-month="viewMode = 'month'"
-        />
-        <MealCalendarMonth
-          v-else
-          :client-id="client.id"
-          :program-id="activeProgramId"
-          @open-week="openWeekView"
-        />
-      </template>
-
-      <v-alert v-else type="info" variant="tonal" color="primary">
-        This client does not have an active program yet. Assign a plan to start scheduling meals.
-      </v-alert>
     </div>
   </v-container>
 </template>
+
 
 <script setup>
 import { ref, computed, defineAsyncComponent } from "vue";
@@ -230,7 +180,7 @@ import {
 } from "date-fns";
 
 const MealCalendar = defineAsyncComponent(() =>
-  import("@/components/MealCalendar.vue")
+  import("@/components/MealCalendar/index.vue")   
 );
 const MealCalendarMonth = defineAsyncComponent(() =>
   import("@/components/MealCalendarMonth.vue")
@@ -240,7 +190,8 @@ const route = useRoute();
 const dataStore = useDataStore();
 const { clients } = storeToRefs(dataStore);
 
-const viewMode = ref("month");
+const viewMode = ref("week");
+
 const selectedDate = ref(new Date());
 
 const mealTimes = MEAL_TIMES;
@@ -497,12 +448,23 @@ function mealSummary(meal) {
 </script>
 
 <style scoped>
-.upcoming-day-item {
-  cursor: pointer;
-  transition: background-color 0.2s ease;
+.client-detail-view {
+  background-color: #f8f9fb;
+  min-height: 100vh;
 }
 
-.upcoming-day-item:hover {
-  background-color: rgba(25, 118, 210, 0.08);
+.client-detail-view h1 {
+  font-weight: 600;
+}
+
+.v-btn-toggle {
+  background-color: #f5f5f5;
+  border-radius: 8px;
+}
+
+.v-btn-toggle .v-btn--active {
+  background-color: #1976d2;
+  color: white;
 }
 </style>
+

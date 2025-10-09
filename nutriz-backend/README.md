@@ -36,8 +36,8 @@ To get the backend running locally:
 3.  **Create a `.env` file** in the `nutriz-backend` directory and add the following environment variables. Replace placeholders with your actual values:
 
     ```env
-    MONGO_URI=mongodb+srv://josh:4FYaThIJlmWj1oQO@cluster0.yohnw.mongodb.net/nutriz?retryWrites=true&w=majority&appName=Cluster0
-    JWT_SECRET=playerPipelineSecretKey123 # IMPORTANT: Change this to a strong, random key for production
+    MONGO_URI=mongodb+srv://******
+    JWT_SECRET=******* # IMPORTANT: Change this to a strong, random key for production
     PORT=5000
     FRONTEND_URL=http://localhost:8080 # Your frontend's development URL
     BASE_URL=https://your-public-url.com # Update this when you deploy your backend
