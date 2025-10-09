@@ -148,7 +148,7 @@ const itemName = computed(() => {
   return sourceItem ? sourceItem.name : 'Unknown Item';
 });
 
-// ✅ Ensure macros always exists
+// ✅ Ensure the macros object always exists
 function ensureMacros() {
   if (!props.item.macros) {
     props.item.macros = { calories: 0, protein: 0, carbs: 0, fat: 0 };
