@@ -2,119 +2,64 @@
   <v-container>
     <v-row align="center" class="mb-4">
       <v-col>
-        <h1 class="text-h4">Meals Database</h1>
+        <h1 class="text-h4">Meal Programs</h1>
       </v-col>
       <v-col class="text-right">
-        <v-btn color="primary" prepend-icon="mdi-plus" @click="openAddDialog">Add Meal</v-btn>
+        <v-btn color="primary" prepend-icon="mdi-plus" @click="openAddDialog">Create Program</v-btn>
       </v-col>
     </v-row>
 
+    <v-alert v-if="dataStore.errors.programs" type="error" class="mb-4">
+      {{ dataStore.errors.programs }}
+    </v-alert>
+
     <v-card>
+      <v-progress-linear v-if="dataStore.loading.programs" indeterminate color="primary"></v-progress-linear>
       <v-card-text>
-        <v-data-table :headers="headers" :items="mealsWithMacros" item-key="id">
+        <v-data-table :headers="headers" :items="programRows" item-key="id">
           <template v-slot:item.macros="{ item }">
-            Cal: {{ item.totalMacros.calories.toFixed(0) }} / Prot: {{ item.totalMacros.protein.toFixed(0) }}g / Carb: {{ item.totalMacros.carbs.toFixed(0) }}g / Fat: {{ item.totalMacros.fat.toFixed(0) }}g
+            Cal: {{ item.totalMacros.calories.toFixed(0) }} /
+            Prot: {{ item.totalMacros.protein.toFixed(0) }}g /
+            Carb: {{ item.totalMacros.carbs.toFixed(0) }}g /
+            Fat: {{ item.totalMacros.fat.toFixed(0) }}g
           </template>
           <template v-slot:item.actions="{ item }">
-            <v-icon small class="mr-2" @click="editMeal(item)">mdi-pencil</v-icon>
-            <v-icon small @click="deleteMeal(item)">mdi-delete</v-icon>
+            <v-btn icon variant="text" :to="{ name: 'PlanSummary', params: { clientId: item.clientId }, query: { programId: item.id } }">
+              <v-icon>mdi-eye</v-icon>
+            </v-btn>
+            <v-btn icon variant="text" color="grey" @click="deleteProgram(item)">
+              <v-icon>mdi-delete</v-icon>
+            </v-btn>
           </template>
         </v-data-table>
       </v-card-text>
     </v-card>
 
-    <v-dialog v-model="dialog" max-width="900px">
+    <v-dialog v-model="dialog" max-width="600px">
       <v-card>
-        <v-card-title class="d-flex justify-space-between align-center">
-          <span class="text-h5">{{ formTitle }}</span>
-          <div class="text-subtitle-2">
-            Totals:
-            <span class="ml-2">Cal: <b>{{ mealTotalMacros.calories.toFixed(0) }}</b></span>
-            <span class="ml-3">Prot: <b>{{ mealTotalMacros.protein.toFixed(0) }}g</b></span>
-            <span class="ml-3">Carb: <b>{{ mealTotalMacros.carbs.toFixed(0) }}g</b></span>
-            <span class="ml-3">Fat: <b>{{ mealTotalMacros.fat.toFixed(0) }}g</b></span>
-          </div>
+        <v-card-title>
+          <span class="text-h5">Create Program</span>
         </v-card-title>
         <v-card-text>
           <v-form ref="form">
-            <v-text-field v-model="editedItem.name" label="Meal Name*" :rules="[rules.required]" class="mb-4"></v-text-field>
-            
-            <div v-for="(component, index) in editedItem.components" :key="index">
-              <v-card class="mb-3" variant="outlined">
-                <v-card-text>
-                  <v-row align="center" dense>
-                    <v-col cols="12" sm="6">
-                      <v-autocomplete
-                        v-if="!('customName' in component)"
-                        :model-value="component.foodId"
-                        @update:model-value="updateComponent(index, $event)"
-                        :items="foods"
-                        :item-title="item => `${item.brand} ${item.name}`"
-                        item-value="id"
-                        label="Select Food"
-                        density="compact"
-                        hide-details
-                      ></v-autocomplete>
-                      <v-text-field
-                        v-else
-                        v-model="component.customName"
-                        label="Custom Item Name"
-                        density="compact"
-                        hide-details
-                      ></v-text-field>
-                    </v-col>
-                    <v-col cols="4" sm="2">
-                       <v-text-field v-model.number="component.amount" label="Amount" type="number" density="compact" hide-details @update:model-value="recalculateMacros(component, true)"></v-text-field>
-                    </v-col>
-                    <v-col cols="4" sm="2">
-                       <v-text-field
-                          v-if="'customName' in component"
-                          v-model="component.serving"
-                          label="Serving"
-                          placeholder="e.g. cup"
-                          density="compact"
-                          hide-details
-                        ></v-text-field>
-                       <v-text-field
-                          v-else
-                          :model-value="getServing(component)"
-                          label="Serving"
-                          density="compact"
-                          hide-details
-                          readonly
-                          variant="underlined"
-                        ></v-text-field>
-                    </v-col>
-                     <v-col cols="4" sm="2" class="text-right">
-                        <v-btn :icon="component.expanded ? 'mdi-chevron-up' : 'mdi-chevron-down'" variant="text" @click="component.expanded = !component.expanded"></v-btn>
-                        <v-btn icon="mdi-delete" variant="text" color="grey" @click="removeComponent(index)"></v-btn>
-                    </v-col>
-                  </v-row>
-                  
-                  <v-expand-transition>
-                    <div v-if="component.expanded">
-                      <v-divider class="my-3"></v-divider>
-                      <p class="text-caption">Override Macros for this Component</p>
-                      <v-row dense>
-                        <v-col><v-text-field v-model.number="component.macros.calories" label="Calories" density="compact" type="number"></v-text-field></v-col>
-                        <v-col><v-text-field v-model.number="component.macros.protein" label="Protein" density="compact" type="number" suffix="g"></v-text-field></v-col>
-                        <v-col><v-text-field v-model.number="component.macros.carbs" label="Carbs" density="compact" type="number" suffix="g"></v-text-field></v-col>
-                        <v-col><v-text-field v-model.number="component.macros.fat" label="Fat" density="compact" type="number" suffix="g"></v-text-field></v-col>
-                      </v-row>
-                    </div>
-                  </v-expand-transition>
-                </v-card-text>
-              </v-card>
-            </div>
-
-            <v-btn @click="addComponent('food')" prepend-icon="mdi-plus" class="mr-2">Add Ingredient</v-btn>
-            <v-btn @click="addComponent('custom')" prepend-icon="mdi-plus">Add Custom Item</v-btn>
+            <v-select
+              v-model="formState.clientId"
+              :items="clientOptions"
+              item-title="label"
+              item-value="id"
+              label="Client*"
+              :rules="[rules.required]"
+            ></v-select>
+            <v-text-field v-model="formState.name" label="Program Name*" :rules="[rules.required]"></v-text-field>
+            <v-text-field v-model="formState.startDate" type="date" label="Start Date*" :rules="[rules.required]"></v-text-field>
+            <v-text-field v-model.number="formState.length" type="number" label="Length (days)*" :rules="[rules.required]"></v-text-field>
+            <v-textarea v-model="formState.notes" label="Notes" rows="3"></v-textarea>
           </v-form>
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn color="blue-darken-1" variant="text" @click="closeDialog">Cancel</v-btn>
-          <v-btn color="blue-darken-1" variant="text" @click="saveMeal">Save</v-btn>
+          <v-btn color="blue-darken-1" variant="text" :loading="saving" @click="createProgram">Create</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -122,134 +67,78 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
-import { useDataStore } from "@/stores/useDataStore";
+import { computed, onMounted, ref } from "vue";
 import { storeToRefs } from "pinia";
+import { useDataStore } from "@/stores/useDataStore";
 
 const dataStore = useDataStore();
-const { meals, foods } = storeToRefs(dataStore);
+const { programs, clients } = storeToRefs(dataStore);
 
 const dialog = ref(false);
 const form = ref(null);
-const editedIndex = ref(-1);
-
-const defaultItem = { id: null, name: "", components: [] };
-const editedItem = ref(JSON.parse(JSON.stringify(defaultItem)));
-
-const formTitle = computed(() => (editedIndex.value === -1 ? "Add New Meal" : "Edit Meal"));
-const rules = { required: (value) => !!value || "Required." };
-
-// --- HELPER FUNCTION ---
-function getMacros(component, forceRecalc = false) {
-  const emptyMacros = { calories: 0, protein: 0, carbs: 0, fat: 0 };
-  if (!component) return emptyMacros;
-
-  if (component.expanded && !forceRecalc) {
-      return component.macros || emptyMacros;
-  }
-  
-  if ('customName' in component) {
-      return component.macros || emptyMacros;
-  }
-
-  const food = foods.value.find(f => f.id === component.foodId);
-  if (!food) return emptyMacros;
-  
-  const multiplier = component.amount || 0;
-  return {
-    calories: (food.macrosPerServing.calories || 0) * multiplier,
-    protein: (food.macrosPerServing.protein || 0) * multiplier,
-    carbs: (food.macrosPerServing.carbs || 0) * multiplier,
-    fat: (food.macrosPerServing.fat || 0) * multiplier,
-  };
-}
-
-// --- COMPUTED PROPERTIES ---
-const mealsWithMacros = computed(() => {
-  return meals.value.map(meal => {
-    const totalMacros = (meal.components || []).reduce((totals, component) => {
-      const macros = getMacros(component, true); // Always force recalc for the list view
-      totals.calories += macros.calories;
-      totals.protein += macros.protein;
-      totals.carbs += macros.carbs;
-      totals.fat += macros.fat;
-      return totals;
-    }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
-    return { ...meal, totalMacros };
-  });
-});
-
-const mealTotalMacros = computed(() => {
-  if (!editedItem.value.components) return { calories: 0, protein: 0, carbs: 0, fat: 0 };
-  return editedItem.value.components.reduce((totals, component) => {
-    const macros = getMacros(component);
-    totals.calories += Number(macros.calories) || 0;
-    totals.protein += Number(macros.protein) || 0;
-    totals.carbs += Number(macros.carbs) || 0;
-    totals.fat += Number(macros.fat) || 0;
-    return totals;
-  }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
-});
+const saving = ref(false);
 
 const headers = ref([
-  { title: "Meal Name", key: "name", align: "start" },
-  { title: "Macros (1 Serving)", key: "macros", sortable: false },
+  { title: "Program", key: "name", align: "start" },
+  { title: "Client", key: "clientName" },
+  { title: "Start", key: "startDate" },
+  { title: "Length", key: "length" },
+  { title: "Macros", key: "macros", sortable: false },
   { title: "Actions", key: "actions", sortable: false },
 ]);
 
-// --- COMPONENT LOGIC ---
-function addComponent(type) {
-  const newComponent = { amount: 1, macros: { calories: 0, protein: 0, carbs: 0, fat: 0 }, expanded: false };
-  if (type === 'food') {
-    newComponent.foodId = null;
-  } else if (type === 'custom') {
-    newComponent.customName = "";
-    newComponent.serving = "";
-    newComponent.expanded = true; // Custom items start expanded to enter macros
-  }
-  editedItem.value.components.push(newComponent);
-}
+const formState = ref({
+  clientId: null,
+  name: "",
+  startDate: new Date().toISOString().substring(0, 10),
+  length: 7,
+  notes: "",
+});
 
-function removeComponent(index) {
-  editedItem.value.components.splice(index, 1);
-}
+const rules = {
+  required: (value) => !!value || "Required.",
+};
 
-function getServing(component) {
-  if ('customName' in component) return component.serving || "unit";
-  const food = foods.value.find(f => f.id === component.foodId);
-  return food ? food.servingUnit : "";
-}
+onMounted(() => {
+  Promise.all([dataStore.fetchClients(), dataStore.fetchPrograms()]).catch(() => {});
+});
 
-function updateComponent(index, foodId) {
-  const component = editedItem.value.components[index];
-  component.foodId = foodId;
-  recalculateMacros(component, true); // Force recalculation
-}
+const clientOptions = computed(() =>
+  clients.value.map((client) => ({ id: client.id, label: client.name }))
+);
 
-function recalculateMacros(component, force = false) {
-    if (component.expanded && !force) return; // Respect manual overrides unless forced
-    component.macros = getMacros(component, true);
-}
+const clientMap = computed(() => {
+  const map = new Map();
+  clients.value.forEach((client) => map.set(client.id, client.name));
+  return map;
+});
+
+const programRows = computed(() =>
+  programs.value.map((program) => ({
+    ...program,
+    clientName: clientMap.value.get(program.clientId) || "Unknown",
+    totalMacros: program.days?.reduce(
+      (totals, day) => {
+        if (!day?.macros) return totals;
+        totals.calories += day.macros.calories || 0;
+        totals.protein += day.macros.protein || 0;
+        totals.carbs += day.macros.carbs || 0;
+        totals.fat += day.macros.fat || 0;
+        return totals;
+      },
+      { calories: 0, protein: 0, carbs: 0, fat: 0 }
+    ) || { calories: 0, protein: 0, carbs: 0, fat: 0 },
+  }))
+);
 
 function openAddDialog() {
-  editedIndex.value = -1;
-  editedItem.value = JSON.parse(JSON.stringify(defaultItem));
-  editedItem.value.id = Date.now();
-  dialog.value = true;
-}
-
-function editMeal(item) {
-  editedIndex.value = meals.value.findIndex(m => m.id === item.id);
-  // Find the original item from the base `meals` ref to edit
-  const originalMeal = meals.value[editedIndex.value];
-  const mealToEdit = JSON.parse(JSON.stringify(originalMeal));
-  // Initialize UI state properties
-  (mealToEdit.components || []).forEach(c => {
-      c.expanded = false;
-      // Pre-calculate macros for editing
-      c.macros = getMacros(c, true);
-  });
-  editedItem.value = mealToEdit;
+  formState.value = {
+    clientId: null,
+    name: "",
+    startDate: new Date().toISOString().substring(0, 10),
+    length: 7,
+    notes: "",
+  };
   dialog.value = true;
 }
 
@@ -257,26 +146,36 @@ function closeDialog() {
   dialog.value = false;
 }
 
-async function saveMeal() {
+async function createProgram() {
   const { valid } = await form.value.validate();
   if (!valid) return;
-
-  const mealToSave = JSON.parse(JSON.stringify(editedItem.value));
-  (mealToSave.components || []).forEach(c => delete c.expanded);
-
-
-  if (editedIndex.value > -1) {
-    meals.value[editedIndex.value] = mealToSave;
-  } else {
-    meals.value.unshift(mealToSave);
+  saving.value = true;
+  try {
+    await dataStore.createProgram({
+      clientId: formState.value.clientId,
+      name: formState.value.name,
+      startDate: formState.value.startDate,
+      length: formState.value.length,
+      notes: formState.value.notes,
+    });
+    dialog.value = false;
+  } catch (error) {
+    console.error(error);
+  } finally {
+    saving.value = false;
   }
-  closeDialog();
 }
 
-function deleteMeal(item) {
-  const index = meals.value.findIndex(m => m.id === item.id);
-  if (confirm('Are you sure you want to delete this meal?')) {
-    if (index > -1) meals.value.splice(index, 1);
+async function deleteProgram(program) {
+  if (!program?.id) return;
+  if (!window.confirm("Delete this program?")) return;
+  saving.value = true;
+  try {
+    await dataStore.deleteProgram(program.id);
+  } catch (error) {
+    console.error(error);
+  } finally {
+    saving.value = false;
   }
 }
 </script>

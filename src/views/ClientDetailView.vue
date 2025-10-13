@@ -1,114 +1,120 @@
 <template>
-  <!-- Make the container fluid and give more horizontal padding -->
-  <v-container fluid class="client-detail-view px-8 py-4">
+  <v-container class="py-6">
     <div v-if="!client">
-      <p>Loading client details...</p>
+      <v-progress-circular indeterminate color="primary"></v-progress-circular>
     </div>
     <div v-else>
-      <!-- Header -->
-      <v-row>
+      <v-row class="mb-6">
         <v-col cols="12">
           <div class="d-flex align-center mb-2">
             <v-btn to="/clients" icon="mdi-arrow-left" variant="text" class="mr-2"></v-btn>
-            <h1 class="text-h4">{{ client.name }}</h1>
-            <v-chip
-              :color="client.status === 'Active' ? 'green' : 'orange'"
-              class="ml-4"
-              size="small"
-            >
-              {{ client.status }}
-            </v-chip>
+            <div>
+              <h1 class="text-h4">{{ client.name }}</h1>
+              <div class="text-subtitle-1">{{ client.contact?.email }}</div>
+            </div>
             <v-spacer></v-spacer>
             <v-btn
-              :to="`/clients/${client.id}/plan`"
+              v-if="programsForClient.length"
+              :to="{ name: 'PlanSummary', params: { clientId: client.id }, query: { programId: programsForClient[0].id } }"
               color="secondary"
-              prepend-icon="mdi-printer"
+              prepend-icon="mdi-eye"
             >
-              View Client Plan
+              View Latest Program
             </v-btn>
           </div>
         </v-col>
       </v-row>
 
-      <!-- View Toggle -->
-      <v-row class="mb-4">
-        <v-btn-toggle v-model="viewMode" mandatory>
-          <v-btn value="week" prepend-icon="mdi-calendar-week">Week View</v-btn>
-          <v-btn value="month" prepend-icon="mdi-calendar-month">Month View</v-btn>
-        </v-btn-toggle>
+      <v-row class="mb-6">
+        <v-col cols="12" md="6">
+          <v-card>
+            <v-card-title>Client Details</v-card-title>
+            <v-card-text>
+              <p><strong>Phone:</strong> {{ client.contact?.phone || "—" }}</p>
+              <p><strong>Date of Birth:</strong> {{ client.dob ? formatDate(client.dob) : "—" }}</p>
+              <p><strong>Goals:</strong> {{ (client.goals || []).join(", ") || "—" }}</p>
+              <p><strong>Notes:</strong></p>
+              <p class="text-body-2">{{ client.notes || "No notes yet." }}</p>
+            </v-card-text>
+          </v-card>
+        </v-col>
       </v-row>
 
-      <!-- Calendar Rendering -->
-      <v-row justify="center">
-        <v-col cols="12" xl="10" lg="11" md="12">
-          <MealCalendar
-            v-if="viewMode === 'week'"
-            :client-id="client.id"
-            :initial-date="selectedDate"
-            @back-to-month="viewMode = 'month'"
-          />
-          <MealCalendarMonth
-            v-else
-            :client-id="client.id"
-            :program-id="client.programs[0].id"
-            @open-week="openWeekView"
-          />
+      <v-row>
+        <v-col cols="12">
+          <h2 class="text-h5 mb-3">Meal Programs</h2>
+        </v-col>
+        <v-col cols="12" md="6" lg="4" v-for="program in programsForClient" :key="program.id">
+          <v-card>
+            <v-card-title>{{ program.name }}</v-card-title>
+            <v-card-subtitle>
+              {{ formatDate(program.startDate) }} · {{ program.length }} days
+            </v-card-subtitle>
+            <v-card-text>
+              <p><strong>Notes:</strong> {{ program.notes || "None" }}</p>
+              <p>
+                <strong>Macros:</strong>
+                Cal {{ totalProgramMacros(program).calories.toFixed(0) }} /
+                P {{ totalProgramMacros(program).protein.toFixed(0) }}g /
+                C {{ totalProgramMacros(program).carbs.toFixed(0) }}g /
+                F {{ totalProgramMacros(program).fat.toFixed(0) }}g
+              </p>
+            </v-card-text>
+            <v-card-actions>
+              <v-btn
+                :to="{ name: 'PlanSummary', params: { clientId: client.id }, query: { programId: program.id } }"
+                text
+                color="primary"
+              >
+                Open Summary
+              </v-btn>
+            </v-card-actions>
+          </v-card>
         </v-col>
       </v-row>
     </div>
   </v-container>
 </template>
 
-
 <script setup>
-import { ref, computed, defineAsyncComponent } from "vue";
+import { computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
 import { useDataStore } from "@/stores/useDataStore";
 import { storeToRefs } from "pinia";
 
-const MealCalendar = defineAsyncComponent(() =>
-  import("@/components/MealCalendar/index.vue")   
-);
-const MealCalendarMonth = defineAsyncComponent(() =>
-  import("@/components/MealCalendarMonth.vue")
-);
-
 const route = useRoute();
 const dataStore = useDataStore();
-const { clients } = storeToRefs(dataStore);
+const { clients, programs } = storeToRefs(dataStore);
 
-const viewMode = ref("week");
+const clientId = route.params.id;
 
-const selectedDate = ref(new Date());
+onMounted(() => {
+  dataStore.fetchClients().catch(() => {});
+  dataStore.fetchPrograms({ clientId }).catch(() => {});
+});
 
-const client = computed(() =>
-  clients.value.find((c) => c.id === Number(route.params.id))
+const client = computed(() => clients.value.find((c) => c.id === clientId));
+
+const programsForClient = computed(() =>
+  programs.value.filter((program) => program.clientId === clientId)
 );
 
-function openWeekView(date) {
-  selectedDate.value = new Date(date);
-  viewMode.value = "week";
+function formatDate(value) {
+  if (!value) return "—";
+  return new Date(value).toLocaleDateString();
+}
+
+function totalProgramMacros(program) {
+  return program.days?.reduce(
+    (totals, day) => {
+      if (!day?.macros) return totals;
+      totals.calories += day.macros.calories || 0;
+      totals.protein += day.macros.protein || 0;
+      totals.carbs += day.macros.carbs || 0;
+      totals.fat += day.macros.fat || 0;
+      return totals;
+    },
+    { calories: 0, protein: 0, carbs: 0, fat: 0 }
+  ) || { calories: 0, protein: 0, carbs: 0, fat: 0 };
 }
 </script>
-
-<style scoped>
-.client-detail-view {
-  background-color: #f8f9fb;
-  min-height: 100vh;
-}
-
-.client-detail-view h1 {
-  font-weight: 600;
-}
-
-.v-btn-toggle {
-  background-color: #f5f5f5;
-  border-radius: 8px;
-}
-
-.v-btn-toggle .v-btn--active {
-  background-color: #1976d2;
-  color: white;
-}
-</style>
-

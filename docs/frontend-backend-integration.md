@@ -1,11 +1,18 @@
 # Frontend ↔ Backend Integration Plan
 
-This document summarizes the concrete work required to wire the existing Vue/Pinia frontend to the Express/MongoDB backend so the project delivers full CRUD functionality over authenticated REST APIs.
+## Current Implementation Snapshot (February 2025)
+
+- The Vue 3 + Pinia frontend now authenticates against the Express API via the new `useAuthStore` and Axios client interceptors. Login sessions persist in `localStorage` and protected routes are guarded in the router.
+- CRUD views for **Clients**, **Foods**, **Recipes**, and **Programs** have been refactored to call the live REST endpoints. Dialogs reuse the existing Vuetify UX while performing real HTTP mutations.
+- Program summaries (`PlanSummaryView`) pull nested days/meals from the backend and display macro totals alongside lookups from the food/recipe catalogues.
+- All API calls honor the `VITE_API_BASE_URL` environment variable so the SPA can target different deployments without code changes.
+
+The remaining sections outline the architectural plan that guided this implementation and highlight future enhancements.
 
 ## Current Frontend State
-- The Pinia data store currently ships with hard-coded seed arrays for foods, meals, recipes, clients, and program structures; nothing is persisted or fetched from an API yet.【F:src/stores/useDataStore.js†L1-L123】
-- Views such as `ClientsView`, `ClientDetailView`, `FoodsView`, and `RecipesView` read directly from that in-memory store, so any refresh loses changes.【F:src/views/ClientsView.vue†L1-L120】【F:src/views/FoodsView.vue†L1-L180】
-- There is no centralized API client, auth token storage, or error handling layer in the frontend codebase.
+- `useDataStore` now wraps Axios calls for clients, foods, recipes, and programs, exposing loading/error state so Vuetify tables can react to API status.【F:src/stores/useDataStore.js†L1-L221】
+- Feature views (`ClientsView`, `FoodsView`, `RecipesView`, `MealsView`) persist through the backend, using create/update/delete helpers rather than mutating local arrays.【F:src/views/ClientsView.vue†L1-L210】【F:src/views/FoodsView.vue†L1-L208】【F:src/views/RecipesView.vue†L1-L238】【F:src/views/MealsView.vue†L1-L170】
+- Authentication flows live in `useAuthStore` and the router guard, which hydrate sessions from storage and push unauthorized users back to `/login`.【F:src/stores/useAuthStore.js†L1-L73】【F:src/router/index.js†L1-L56】
 
 ## Confirmed Scope Decisions
 

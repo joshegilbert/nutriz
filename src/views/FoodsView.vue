@@ -9,17 +9,20 @@
       </v-col>
     </v-row>
 
+    <v-alert v-if="dataStore.errors.foods" type="error" class="mb-4">
+      {{ dataStore.errors.foods }}
+    </v-alert>
+
     <v-card>
+      <v-progress-linear v-if="dataStore.loading.foods" indeterminate color="primary"></v-progress-linear>
       <v-card-text>
         <v-data-table :headers="headers" :items="foods" item-key="id">
-          <template v-slot:item.serving="{ item }">
-            {{ item.servingSize }} {{ item.servingUnit }} ({{ item.gramsPerServing }}g)
+          <template v-slot:item.defaultServingSize="{ item }">
+            {{ item.defaultServingSize }}
           </template>
-          
           <template v-slot:item.macros="{ item }">
-            Cal: {{ item.macrosPerServing.calories }} / Prot: {{ item.macrosPerServing.protein }}g / Carb: {{ item.macrosPerServing.carbs }}g / Fat: {{ item.macrosPerServing.fat }}g
+            Cal: {{ item.caloriesPerServing }} / Prot: {{ item.proteinPerServing }}g / Carb: {{ item.carbsPerServing }}g / Fat: {{ item.fatPerServing }}g
           </template>
-          
           <template v-slot:item.actions="{ item }">
             <v-icon small class="mr-2" @click="editFood(item)">mdi-pencil</v-icon>
             <v-icon small @click="deleteFood(item)">mdi-delete</v-icon>
@@ -28,8 +31,8 @@
       </v-card-text>
     </v-card>
 
-    <v-dialog v-model="dialog" max-width="800px">
-     <v-card>
+    <v-dialog v-model="dialog" max-width="600px">
+      <v-card>
         <v-card-title>
           <span class="text-h5">{{ formTitle }}</span>
         </v-card-title>
@@ -37,26 +40,19 @@
           <v-form ref="form">
             <v-container>
               <v-row>
-                <v-col cols="12" sm="6">
-                  <v-text-field v-model="editedItem.brand" label="Brand (e.g., Fage)"></v-text-field>
-                </v-col>
-                <v-col cols="12" sm="6">
+                <v-col cols="12">
                   <v-text-field v-model="editedItem.name" label="Food Name*" :rules="[rules.required]"></v-text-field>
                 </v-col>
-              </v-row>
-
-              <v-divider class="my-4"></v-divider>
-              <p class="text-subtitle-1 mb-2">Serving Information</p>
-
-              <v-row>
-                <v-col cols="12" sm="4">
-                  <v-text-field v-model.number="editedItem.servingSize" label="Serving Size*" type="number" :rules="[rules.required]"></v-text-field>
+                <v-col cols="12" sm="6">
+                  <v-select
+                    v-model="editedItem.category"
+                    :items="categories"
+                    label="Category"
+                    hide-details
+                  ></v-select>
                 </v-col>
-                <v-col cols="12" sm="4">
-                  <v-text-field v-model="editedItem.servingUnit" label="Serving Unit*" hint="e.g., g, cup, scoop, 1 large egg" :rules="[rules.required]"></v-text-field>
-                </v-col>
-                 <v-col cols="12" sm="4">
-                  <v-text-field v-model.number="editedItem.gramsPerServing" label="Grams Per Serving*" type="number" suffix="g" :rules="[rules.required]"></v-text-field>
+                <v-col cols="12" sm="6">
+                  <v-text-field v-model="editedItem.defaultServingSize" label="Default Serving Size*" :rules="[rules.required]"></v-text-field>
                 </v-col>
               </v-row>
 
@@ -65,19 +61,16 @@
 
               <v-row>
                 <v-col cols="6" sm="3">
-                  <v-text-field v-model.number="editedItem.macrosPerServing.calories" label="Calories*" type="number" :rules="[rules.required]"></v-text-field>
+                  <v-text-field v-model.number="editedItem.caloriesPerServing" label="Calories*" type="number" :rules="[rules.required]"></v-text-field>
                 </v-col>
                 <v-col cols="6" sm="3">
-                  <v-text-field v-model.number="editedItem.macrosPerServing.protein" label="Protein*" suffix="g" type="number" :rules="[rules.required]"></v-text-field>
+                  <v-text-field v-model.number="editedItem.proteinPerServing" label="Protein*" suffix="g" type="number" :rules="[rules.required]"></v-text-field>
                 </v-col>
                 <v-col cols="6" sm="3">
-                  <v-text-field v-model.number="editedItem.macrosPerServing.carbs" label="Carbs*" suffix="g" type="number" :rules="[rules.required]"></v-text-field>
+                  <v-text-field v-model.number="editedItem.carbsPerServing" label="Carbs*" suffix="g" type="number" :rules="[rules.required]"></v-text-field>
                 </v-col>
                 <v-col cols="6" sm="3">
-                  <v-text-field v-model.number="editedItem.macrosPerServing.fat" label="Fat*" suffix="g" type="number" :rules="[rules.required]"></v-text-field>
-                </v-col>
-                <v-col cols="6" sm="3">
-                  <v-text-field v-model.number="editedItem.macrosPerServing.fiber" label="Fiber" suffix="g" type="number"></v-text-field>
+                  <v-text-field v-model.number="editedItem.fatPerServing" label="Fat*" suffix="g" type="number" :rules="[rules.required]"></v-text-field>
                 </v-col>
               </v-row>
             </v-container>
@@ -87,7 +80,21 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn color="blue-darken-1" variant="text" @click="closeDialog">Cancel</v-btn>
-          <v-btn color="blue-darken-1" variant="text" @click="saveFood">Save</v-btn>
+          <v-btn color="blue-darken-1" variant="text" :loading="saving" @click="saveFood">Save</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="dialogDelete" max-width="500px">
+      <v-card>
+        <v-card-title class="text-h5">
+          Are you sure you want to delete this food item?
+        </v-card-title>
+        <v-card-actions>
+          <v-spacer></v-spacer>
+          <v-btn color="blue-darken-1" variant="text" @click="closeDelete">Cancel</v-btn>
+          <v-btn color="blue-darken-1" variant="text" :loading="saving" @click="deleteFoodConfirm">OK</v-btn>
+          <v-spacer></v-spacer>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -95,8 +102,7 @@
 </template>
 
 <script setup>
-// The script setup remains the same
-import { ref, computed } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useDataStore } from "@/stores/useDataStore";
 import { storeToRefs } from "pinia";
 
@@ -104,64 +110,110 @@ const dataStore = useDataStore();
 const { foods } = storeToRefs(dataStore);
 
 const dialog = ref(false);
+const dialogDelete = ref(false);
 const form = ref(null);
 const editedIndex = ref(-1);
+const saving = ref(false);
+
+const clone = (value) => JSON.parse(JSON.stringify(value));
+
+const categories = ["Protein", "Vegetable", "Fruit", "Grain", "Dairy", "Fat", "Other"];
 
 const defaultItem = {
-    id: null,
-    brand: "",
-    name: "",
-    servingSize: 0,
-    servingUnit: "",
-    gramsPerServing: 0,
-    macrosPerServing: { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 }
+  id: null,
+  name: "",
+  category: "Other",
+  defaultServingSize: "",
+  caloriesPerServing: 0,
+  proteinPerServing: 0,
+  carbsPerServing: 0,
+  fatPerServing: 0,
 };
-const editedItem = ref(JSON.parse(JSON.stringify(defaultItem)));
+const editedItem = ref(clone(defaultItem));
 
 const formTitle = computed(() => (editedIndex.value === -1 ? "Add New Food" : "Edit Food"));
 const rules = { required: (value) => !!value || "Required." };
 
 const headers = ref([
-  { title: "Brand", key: "brand" },
   { title: "Food Item", key: "name", align: "start" },
-  { title: "Serving", key: "serving", sortable: false },
+  { title: "Category", key: "category" },
+  { title: "Serving", key: "defaultServingSize", sortable: false },
   { title: "Macros (per Serving)", key: "macros", sortable: false },
   { title: "Actions", key: "actions", sortable: false },
 ]);
 
+onMounted(() => {
+  dataStore.fetchFoods().catch(() => {});
+});
+
 function openAddDialog() {
   editedIndex.value = -1;
-  editedItem.value = JSON.parse(JSON.stringify(defaultItem));
-  editedItem.value.id = Date.now();
+  editedItem.value = clone(defaultItem);
   dialog.value = true;
 }
 
 function editFood(item) {
-  editedIndex.value = foods.value.findIndex(f => f.id === item.id);
-  editedItem.value = JSON.parse(JSON.stringify(item));
+  editedIndex.value = foods.value.findIndex((f) => f.id === item.id);
+  editedItem.value = clone(item);
   dialog.value = true;
 }
 
 function closeDialog() {
   dialog.value = false;
+  editedItem.value = clone(defaultItem);
+  editedIndex.value = -1;
+}
+
+function closeDelete() {
+  dialogDelete.value = false;
+  editedItem.value = clone(defaultItem);
+  editedIndex.value = -1;
 }
 
 async function saveFood() {
   const { valid } = await form.value.validate();
   if (!valid) return;
 
-  if (editedIndex.value > -1) {
-    Object.assign(foods.value[editedIndex.value], editedItem.value);
-  } else {
-    foods.value.unshift(editedItem.value);
+  saving.value = true;
+  try {
+    const payload = {
+      name: editedItem.value.name,
+      category: editedItem.value.category,
+      defaultServingSize: editedItem.value.defaultServingSize,
+      caloriesPerServing: Number(editedItem.value.caloriesPerServing) || 0,
+      proteinPerServing: Number(editedItem.value.proteinPerServing) || 0,
+      carbsPerServing: Number(editedItem.value.carbsPerServing) || 0,
+      fatPerServing: Number(editedItem.value.fatPerServing) || 0,
+    };
+    if (editedIndex.value > -1 && editedItem.value.id) {
+      await dataStore.updateFood(editedItem.value.id, payload);
+    } else {
+      await dataStore.createFood(payload);
+    }
+    closeDialog();
+  } catch (error) {
+    console.error(error);
+  } finally {
+    saving.value = false;
   }
-  closeDialog();
 }
 
 function deleteFood(item) {
-    const index = foods.value.findIndex(f => f.id === item.id);
-    if(confirm('Are you sure you want to delete this food item?')){
-        foods.value.splice(index, 1);
-    }
+  editedIndex.value = foods.value.findIndex((f) => f.id === item.id);
+  editedItem.value = clone(item);
+  dialogDelete.value = true;
+}
+
+async function deleteFoodConfirm() {
+  if (!editedItem.value?.id) return;
+  saving.value = true;
+  try {
+    await dataStore.deleteFood(editedItem.value.id);
+    closeDelete();
+  } catch (error) {
+    console.error(error);
+  } finally {
+    saving.value = false;
+  }
 }
 </script>
