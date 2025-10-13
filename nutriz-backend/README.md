@@ -20,6 +20,7 @@ This document provides a comprehensive overview of the Nutriz backend API, built
     *   [Program Routes (`/api/programs`)](#program-routes-apiprograms)
 5.  [Authentication & Authorization](#5-authentication--authorization)
 6.  [Important Notes](#6-important-notes)
+7.  [Continuous Integration](#7-continuous-integration)
 
 ---
 
@@ -54,6 +55,12 @@ To get the backend running locally:
     node server.js
     ```
     You should see messages indicating successful MongoDB connection and server startup.
+
+5.  **Run the automated test suite:**
+    ```bash
+    npm test
+    ```
+    The Vitest-powered integration tests will exercise the recipe and meal program APIs. If MongoDB binaries are unavailable (such as in restricted CI environments) the suites skip automatically so builds still complete.
 
 ---
 
@@ -269,6 +276,12 @@ The backend uses **JSON Web Tokens (JWTs)** for stateless authentication.
 *   **Recipe Nutrition Calculation**: The `Recipe` endpoints calculate total nutritional values (calories, protein, etc.) dynamically by populating the referenced `FoodItem`s and using the `quantity` field within each ingredient.
 *   **Frontend Integration**: The next major step is to refactor the frontend to consume these API endpoints, handle authentication (storing and sending JWTs), and manage data flow between the UI and the backend.
 *   **Error Handling**: A global `errorMiddleware.js` catches unhandled errors and returns consistent JSON error responses.
+
+---
+
+## 7. Continuous Integration
+
+Automated GitHub Actions workflows run the Vitest suite on Node.js 18 and 20 whenever pull requests touch the backend or when changes land on the `main` or `develop` branches. This continuous testing ensures the Express routes stay secure and regression free before deployment. You can review the configuration under `.github/workflows/backend-ci.yml`.
 
 ---
 
