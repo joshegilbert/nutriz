@@ -70,10 +70,10 @@
                     >
                       <v-list-item-title>{{ recipe.name }}</v-list-item-title>
                       <v-list-item-subtitle>
-                        {{ getRecipeMacros(recipe).calories.toFixed(0) }} Cal ·
-                        {{ getRecipeMacros(recipe).protein.toFixed(0) }}P /
-                        {{ getRecipeMacros(recipe).carbs.toFixed(0) }}C /
-                        {{ getRecipeMacros(recipe).fat.toFixed(0) }}F
+                        {{ getLibraryMacros('recipe', recipe).calories.toFixed(0) }} Cal ·
+                        {{ getLibraryMacros('recipe', recipe).protein.toFixed(0) }}P /
+                        {{ getLibraryMacros('recipe', recipe).carbs.toFixed(0) }}C /
+                        {{ getLibraryMacros('recipe', recipe).fat.toFixed(0) }}F
                       </v-list-item-subtitle>
                     </v-list-item>
                   </v-list>
@@ -89,7 +89,12 @@
                       :class="{ active: selectedItem?.id === meal.id }"
                     >
                       <v-list-item-title>{{ meal.name }}</v-list-item-title>
-                      <v-list-item-subtitle>{{ meal.components?.length || 0 }} components</v-list-item-subtitle>
+                      <v-list-item-subtitle>
+                        {{ getLibraryMacros('meal', meal).calories.toFixed(0) }} Cal ·
+                        {{ getLibraryMacros('meal', meal).protein.toFixed(0) }}P /
+                        {{ getLibraryMacros('meal', meal).carbs.toFixed(0) }}C /
+                        {{ getLibraryMacros('meal', meal).fat.toFixed(0) }}F
+                      </v-list-item-subtitle>
                     </v-list-item>
                   </v-list>
                 </v-window-item>
@@ -223,55 +228,73 @@ const isValid = computed(() => {
   );
 });
 
+function getLibraryMacros(type, entity) {
+  if (!entity) return { calories: 0, protein: 0, carbs: 0, fat: 0 };
+  return store.calculateItemMacros(type, entity.id, 1);
+}
+
 // --- Select and calculate macros ---
 function selectItem(item, type) {
   selectedItem.value = { ...item, type };
-  const base =
-    type === "food"
-      ? item.macrosPerServing
-      : type === "recipe"
-      ? getRecipeMacros(item)
-      : { calories: 0, protein: 0, carbs: 0, fat: 0 };
-  macros.value = {
-    calories: base.calories * quantity.value,
-    protein: base.protein * quantity.value,
-    carbs: base.carbs * quantity.value,
-    fat: base.fat * quantity.value,
-  };
+  showOverrides.value = false;
+  if (type === "custom") {
+    macros.value = { calories: 0, protein: 0, carbs: 0, fat: 0 };
+    return;
+  }
+  macros.value = store.calculateItemMacros(
+    type,
+    item.id,
+    quantity.value || 1
+  );
 }
 
 watch(quantity, () => {
-  if (!selectedItem.value) return;
-  selectItem(selectedItem.value, selectedItem.value.type);
+  if (!selectedItem.value || showOverrides.value) return;
+  macros.value = store.calculateItemMacros(
+    selectedItem.value.type,
+    selectedItem.value.id,
+    quantity.value || 1
+  );
 });
-
-function getRecipeMacros(recipe) {
-  const totals = { calories: 0, protein: 0, carbs: 0, fat: 0 };
-  (recipe.components || []).forEach((c) => {
-    const food = store.foods.find((f) => f.id === c.foodId);
-    if (food) {
-      totals.calories += food.macrosPerServing.calories * c.amount;
-      totals.protein += food.macrosPerServing.protein * c.amount;
-      totals.carbs += food.macrosPerServing.carbs * c.amount;
-      totals.fat += food.macrosPerServing.fat * c.amount;
-    }
-  });
-  return totals;
-}
+watch(showOverrides, (next) => {
+  if (!next && selectedItem.value && selectedItem.value.type !== "custom") {
+    macros.value = store.calculateItemMacros(
+      selectedItem.value.type,
+      selectedItem.value.id,
+      quantity.value || 1
+    );
+  }
+});
 
 // --- Handle add ---
 function handleAddItem() {
-  const newItem = {
-    id: Date.now(),
-    type: selectedTab.value,
-    sourceId: selectedItem.value?.id || null,
-    name: selectedItem.value?.name || customName.value,
+  const type = selectedTab.value;
+  const isCustom = type === "custom";
+  const itemRecord = selectedItem.value;
+
+  const result = {
+    type: isCustom ? "custom" : type,
+    sourceId: isCustom ? null : itemRecord?.id ?? null,
+    name: isCustom ? customName.value.trim() : itemRecord?.name,
     amount: quantity.value,
-    macros: macros.value,
-    macrosSource: showOverrides.value ? "manual" : "auto",
+    unit: resolveUnit(isCustom ? null : itemRecord),
+    notes: "",
+    macros: { ...macros.value },
+    macrosSource: showOverrides.value || isCustom ? "overridden" : "auto",
+  };
+
+  const newItem = {
+    ...result,
   };
   emit("add", newItem);
   closeDialog();
+}
+
+function resolveUnit(item) {
+  if (!item) return "";
+  if (item.servingUnit) return item.servingUnit;
+  if (item.defaultServingSize) return item.defaultServingSize;
+  return "";
 }
 
 function closeDialog() {

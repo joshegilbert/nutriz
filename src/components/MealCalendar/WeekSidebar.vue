@@ -38,10 +38,10 @@
         <div class="d-flex justify-space-between align-center mb-2">
           <div class="day-info">
             <div class="day-name">
-              {{ format(parseISO(day.date), "EEEE") }}
+              {{ format(localDateFromISO(day.date), "EEEE") }}
             </div>
             <div class="day-date text-grey-darken-1">
-              {{ format(parseISO(day.date), "MMM d") }}
+              {{ format(localDateFromISO(day.date), "MMM d") }}
             </div>
           </div>
         </div>
@@ -105,8 +105,8 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
-import { format, parseISO, addDays } from "date-fns";
+import { ref, computed, watch } from "vue";
+import { format, addDays } from "date-fns";
 
 const props = defineProps({
   program: { type: Object, required: true },
@@ -134,18 +134,26 @@ const visibleDays = computed(() => {
 // 📆 Display range label
 const weekRangeLabel = computed(() => {
   if (!visibleDays.value.length) return "";
-  const start = parseISO(visibleDays.value[0].date);
-  const end = parseISO(visibleDays.value[visibleDays.value.length - 1].date);
+  const start = localDateFromISO(visibleDays.value[0].date);
+  const end = localDateFromISO(visibleDays.value[visibleDays.value.length - 1].date);
   return `${format(start, "MMM d")} – ${format(end, "MMM d")}`;
 });
 
 // ◀️ ▶️ Week navigation
 function prevWeek() {
-  if (currentWeekIndex.value > 0) currentWeekIndex.value--;
+  if (currentWeekIndex.value > 0) {
+    currentWeekIndex.value--;
+    // Auto select first day of the newly visible week
+    if (visibleDays.value.length) emit("selectDay", visibleDays.value[0]);
+  }
 }
 
 function nextWeek() {
-  if (currentWeekIndex.value < totalWeeks.value - 1) currentWeekIndex.value++;
+  if (currentWeekIndex.value < totalWeeks.value - 1) {
+    currentWeekIndex.value++;
+    // Auto select first day of the newly visible week
+    if (visibleDays.value.length) emit("selectDay", visibleDays.value[0]);
+  }
 }
 
 // 🧩 Copy / Paste
@@ -171,6 +179,24 @@ function pasteDay() {
 
   emit("updateProgram", props.program);
 }
+
+function localDateFromISO(iso) {
+  if (!iso) return new Date();
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
+// Keep the week view aligned to the externally selected day
+watch(
+  () => props.selectedDate?.date,
+  (newDate) => {
+    if (!newDate) return;
+    const all = props.program?.days || [];
+    const idx = all.findIndex((d) => d.date === newDate);
+    if (idx >= 0) currentWeekIndex.value = Math.floor(idx / daysPerWeek);
+  },
+  { immediate: true }
+);
 </script>
 
 <style scoped>
