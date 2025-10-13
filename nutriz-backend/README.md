@@ -11,11 +11,13 @@ This document provides a comprehensive overview of the Nutriz backend API, built
     *   [Client](#client-model)
     *   [FoodItem](#fooditem-model)
     *   [Recipe](#recipe-model)
+    *   [Program](#program-model)
 4.  [API Routes](#4-api-routes)
     *   [Authentication Routes (`/api/auth`)](#authentication-routes-apiauth)
     *   [Food Item Routes (`/api/fooditems`)](#food-item-routes-apifooditems)
     *   [Client Routes (`/api/clients`)](#client-routes-apiclients)
     *   [Recipe Routes (`/api/recipes`)](#recipe-routes-apirecipes)
+    *   [Program Routes (`/api/programs`)](#program-routes-apiprograms)
 5.  [Authentication & Authorization](#5-authentication--authorization)
 6.  [Important Notes](#6-important-notes)
 
@@ -69,17 +71,22 @@ To get the backend running locally:
 │   ├── User.js           # Mongoose schema for Nutritionist users
 │   ├── Client.js         # Mongoose schema for Client data
 │   ├── FoodItem.js       # Mongoose schema for individual Food Items
-│   └── Recipe.js         # Mongoose schema for Recipe data, referencing FoodItems
+│   ├── Recipe.js         # Mongoose schema for Recipe data, referencing FoodItems
+│   └── Program.js        # Mongoose schema for program/day/meal planning
 ├── routes/
 │   ├── authRoutes.js     # API routes for authentication (register, login)
 │   ├── clientRoutes.js   # API routes for client management (CRUD)
 │   ├── foodItemRoutes.js # API routes for food item management (CRUD)
-│   └── recipeRoutes.js   # API routes for recipe management (CRUD)
+│   ├── recipeRoutes.js   # API routes for recipe management (CRUD)
+│   └── programRoutes.js  # API routes for meal program planning (CRUD)
 ├── controllers/
 │   ├── authController.js     # Logic for authentication routes
 │   ├── clientController.js   # Logic for client routes
 │   ├── foodItemController.js # Logic for food item routes
-│   └── recipeController.js   # Logic for recipe routes
+│   ├── recipeController.js   # Logic for recipe routes
+│   └── programController.js  # Logic for program/day/meal routes
+├── utils/
+│   └── macroCalculator.js    # Shared helpers for macro aggregation
 └── middleware/
     ├── authMiddleware.js     # Middleware for verifying JWT tokens
     └── errorMiddleware.js    # Global error handling middleware
@@ -145,6 +152,24 @@ Represents a complete recipe, composed of referenced `FoodItem`s.
 *   `tags` (Array of Strings)
 *   `createdAt` (Date)
 
+### Program Model
+
+Stores a client's meal program with nested day, meal, and meal-item structures.
+
+*   `nutritionist` (ObjectId, ref: `'User'`, required) - Owner of the program.
+*   `client` (ObjectId, ref: `'Client'`, required) - Client receiving the plan.
+*   `name` (String, required) - Human-friendly label for the schedule.
+*   `startDate` (Date, required) - First day of the program.
+*   `length` (Number, required) - Duration in days.
+*   `notes` (String) - Optional planner notes.
+*   `days` (Array of Day objects):
+    *   `date` (String, required) - ISO date string for the day.
+    *   `meals` (Array) - Each meal contains `mealTime`, `items`, and macro totals.
+    *   `macros` (Object) - Cached totals for the day (`calories`, `protein`, `carbs`, `fat`).
+    *   `macrosSource` (String) - `'auto'` or `'overridden'` to flag manual totals.
+*   Meal objects include `items` plus their own `macros` and `macrosSource` flags.
+*   Meal items support `sourceType` (`food`, `recipe`, `meal`, `custom`), optional component breakdown, quantity (`amount`), notes, and a macros payload.
+
 ---
 
 ## 4. API Routes
@@ -194,6 +219,36 @@ Manage recipes, which reference `FoodItem`s. Nutrition totals are calculated on 
 | `GET`  | `/api/recipes/:id`| Get a single recipe by ID (with populated FoodItems and calculated nutrition) | Private (Nutritionist/Admin) |
 | `PUT`  | `/api/recipes/:id`| Update a recipe                           | Private (Nutritionist/Admin) |
 | `DELETE`| `/api/recipes/:id`| Delete a recipe                           | Private (Nutritionist/Admin) |
+
+Ingredient management endpoints:
+
+* `POST /api/recipes/:id/ingredients` – append a new ingredient.
+* `PATCH /api/recipes/:id/ingredients/:ingredientId` – edit an existing ingredient.
+* `DELETE /api/recipes/:id/ingredients/:ingredientId` – remove an ingredient from the recipe.
+
+### Program Routes (`/api/programs`)
+
+Deliver persistent client meal plans with nested days, meals, and items. Macro totals are recalculated server-side whenever the plan mutates.
+
+| Method | Route                                      | Description                                            | Access                       |
+| :----- | :----------------------------------------- | :----------------------------------------------------- | :--------------------------- |
+| `POST` | `/api/programs`                            | Create a program for a client                          | Private (Nutritionist/Admin) |
+| `GET`  | `/api/programs`                            | List programs (optionally filter by `clientId` query)  | Private (Nutritionist/Admin) |
+| `GET`  | `/api/programs/:id`                        | Fetch a single program with hydrated macros            | Private (Nutritionist/Admin) |
+| `PUT`  | `/api/programs/:id`                        | Update program metadata and replace days               | Private (Nutritionist/Admin) |
+| `DELETE`| `/api/programs/:id`                       | Delete a program                                       | Private (Nutritionist/Admin) |
+
+Nested mutation endpoints (all Private, Nutritionist/Admin):
+
+* `POST /api/programs/:id/days` – append a day to the schedule.
+* `PATCH /api/programs/:id/days/:dayId` – edit a day (date, macros, meals).
+* `DELETE /api/programs/:id/days/:dayId` – remove a day.
+* `POST /api/programs/:id/days/:dayId/meals` – add a meal block to a day.
+* `PATCH /api/programs/:id/days/:dayId/meals/:mealId` – update meal details or items.
+* `DELETE /api/programs/:id/days/:dayId/meals/:mealId` – remove a meal.
+* `POST /api/programs/:id/days/:dayId/meals/:mealId/items` – add an item (food/recipe/meal/custom) to a meal.
+* `PATCH /api/programs/:id/days/:dayId/meals/:mealId/items/:itemId` – edit an item, including macro overrides.
+* `DELETE /api/programs/:id/days/:dayId/meals/:mealId/items/:itemId` – delete an item.
 
 ---
 
