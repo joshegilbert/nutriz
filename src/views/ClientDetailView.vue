@@ -82,7 +82,7 @@ const viewMode = ref("week");
 const selectedDate = ref(new Date());
 
 const client = computed(() =>
-  clients.value.find((c) => c.id === Number(route.params.id))
+  clients.value.find((c) => String(c.id) === route.params.id)
 );
 
 function openWeekView(date) {
