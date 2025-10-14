@@ -9,7 +9,8 @@
       ></v-app-bar-nav-icon>
       <v-toolbar-title>Nutriz</v-toolbar-title>
       <v-spacer></v-spacer>
-      <v-btn to="/login" icon>
+      <span class="mr-4" v-if="userEmail">{{ userEmail }}</span>
+      <v-btn icon @click="handleLogout">
         <v-icon>mdi-logout</v-icon>
       </v-btn>
     </v-app-bar>
@@ -22,9 +23,9 @@
     >
       <v-list>
         <v-list-item
-          prepend-avatar="https://preview.redd.it/can-yall-help-me-find-goofy-batman-profile-pictures-v0-e2lwqqtr5osc1.jpeg?width=1080&crop=smart&auto=webp&s=49b22bb79d72b5aa9093bfbfc4e9613db69f8ec7"
-          title="Bat Man"
-          subtitle="nutritionist@nutriz.app"
+          prepend-icon="mdi-account-circle"
+          :title="userEmail || 'Nutritionist'"
+          :subtitle="authStore.user?.role"
         ></v-list-item>
       </v-list>
 
@@ -65,10 +66,22 @@
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { useDisplay } from "vuetify";
+import { useRouter } from "vue-router";
+import { useAuthStore } from "@/stores/authStore";
 
 const drawer = ref(true);
 const rail = ref(true); // Start as a rail on desktop
 const display = useDisplay();
+
+const authStore = useAuthStore();
+const router = useRouter();
+
+const userEmail = computed(() => authStore.user?.email || "");
+
+async function handleLogout() {
+  authStore.logout();
+  await router.replace({ name: "Login" });
+}
 </script>

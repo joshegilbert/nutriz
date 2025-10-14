@@ -5,11 +5,25 @@
         <h1 class="text-h4">My Clients</h1>
       </v-col>
       <v-col class="text-right">
-        <v-btn color="primary" prepend-icon="mdi-plus" @click="openAddDialog">
+        <v-btn
+          color="primary"
+          prepend-icon="mdi-plus"
+          @click="openAddDialog"
+          :loading="isLoadingClients"
+        >
           Add Client
         </v-btn>
       </v-col>
     </v-row>
+
+    <v-alert
+      v-if="lastError"
+      type="error"
+      class="mb-4"
+      border="start"
+      variant="tonal"
+      :text="lastError"
+    />
 
     <v-card>
       <v-card-text>
@@ -18,6 +32,8 @@
           :items="clients"
           item-key="id"
           class="elevation-1"
+          :loading="isLoadingClients"
+          loading-text="Loading clients..."
         >
           <template v-slot:item.name="{ item }">
             <router-link
@@ -32,6 +48,14 @@
             <v-chip :color="item.status === 'Active' ? 'green' : 'orange'" dark>
               {{ item.status }}
             </v-chip>
+          </template>
+
+          <template v-slot:item.dob="{ item }">
+            {{ formatDate(item.dob) }}
+          </template>
+
+          <template v-slot:item.last_active="{ item }">
+            {{ formatDate(item.last_active) }}
           </template>
 
           <template v-slot:item.actions="{ item }">
@@ -60,12 +84,34 @@
                     :rules="[rules.required]"
                   ></v-text-field>
                 </v-col>
-                <v-col cols="12">
+                <v-col cols="12" sm="6">
                   <v-text-field
                     v-model="editedItem.email"
                     label="Email*"
                     :rules="[rules.required, rules.email]"
                   ></v-text-field>
+                </v-col>
+                <v-col cols="12" sm="6">
+                  <v-text-field
+                    v-model="editedItem.phone"
+                    label="Phone"
+                  ></v-text-field>
+                </v-col>
+                <v-col cols="12" sm="6">
+                  <v-text-field
+                    v-model="editedItem.dob"
+                    label="Date of Birth*"
+                    type="date"
+                    :rules="[rules.required]"
+                  ></v-text-field>
+                </v-col>
+                <v-col cols="12">
+                  <v-textarea
+                    v-model="editedItem.notes"
+                    label="Notes"
+                    rows="2"
+                    auto-grow
+                  ></v-textarea>
                 </v-col>
               </v-row>
             </v-container>
@@ -74,10 +120,15 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn color="blue-darken-1" variant="text" @click="closeDialog">
+          <v-btn color="blue-darken-1" variant="text" @click="closeDialog" :disabled="isLoadingClients">
             Cancel
           </v-btn>
-          <v-btn color="blue-darken-1" variant="text" @click="saveClient">
+          <v-btn
+            color="blue-darken-1"
+            variant="text"
+            @click="saveClient"
+            :loading="isLoadingClients"
+          >
             Save
           </v-btn>
         </v-card-actions>
@@ -91,13 +142,14 @@
         </v-card-title>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn color="blue-darken-1" variant="text" @click="closeDelete">
+          <v-btn color="blue-darken-1" variant="text" @click="closeDelete" :disabled="isLoadingClients">
             Cancel
           </v-btn>
           <v-btn
             color="blue-darken-1"
             variant="text"
             @click="deleteClientConfirm"
+            :loading="isLoadingClients"
           >
             OK
           </v-btn>
@@ -109,61 +161,64 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick } from "vue";
+import { computed, nextTick, onMounted, ref } from "vue";
 import { useDataStore } from "@/stores/useDataStore";
+import { storeToRefs } from "pinia";
 
-// --- Get Data from the Store ---
-const { clients } = useDataStore();
+const dataStore = useDataStore();
+const { clients, isLoadingClients, lastError } = storeToRefs(dataStore);
 
-// --- State Management ---
 const dialog = ref(false);
 const dialogDelete = ref(false);
 const form = ref(null);
-const editedIndex = ref(-1);
+const editedItem = ref(null);
 
 const defaultItem = {
   id: null,
   name: "",
   email: "",
-  status: "Pending",
+  phone: "",
+  dob: "",
+  notes: "",
+  status: "Active",
   last_active: new Date().toISOString().slice(0, 10),
 };
-const editedItem = ref({ ...defaultItem });
 
-const formTitle = computed(() => {
-  return editedIndex.value === -1 ? "Add New Client" : "Edit Client";
-});
+const formTitle = computed(() =>
+  editedItem.value?.id ? "Edit Client" : "Add New Client"
+);
 
-// --- Validation Rules ---
 const rules = {
   required: (value) => !!value || "Required.",
   email: (value) => /.+@.+\..+/.test(value) || "Invalid e-mail.",
 };
 
-// --- Table Headers ---
 const headers = ref([
   { title: "Name", key: "name", align: "start" },
   { title: "Email", key: "email" },
   { title: "Status", key: "status" },
+  { title: "DOB", key: "dob" },
   { title: "Last Active", key: "last_active" },
   { title: "Actions", key: "actions", sortable: false },
 ]);
 
-// --- Component Methods ---
+onMounted(() => {
+  dataStore.fetchClients().catch(() => {
+    /* handled via lastError */
+  });
+});
+
 function openAddDialog() {
-  editedIndex.value = -1;
-  editedItem.value = { ...defaultItem, id: Date.now() };
+  editedItem.value = { ...defaultItem };
   dialog.value = true;
 }
 
 function editClient(item) {
-  editedIndex.value = clients.value.indexOf(item);
   editedItem.value = { ...item };
   dialog.value = true;
 }
 
 function deleteClient(item) {
-  editedIndex.value = clients.value.indexOf(item);
   editedItem.value = { ...item };
   dialogDelete.value = true;
 }
@@ -171,33 +226,51 @@ function deleteClient(item) {
 function closeDialog() {
   dialog.value = false;
   nextTick(() => {
-    editedItem.value = { ...defaultItem };
-    editedIndex.value = -1;
+    editedItem.value = null;
   });
 }
 
 function closeDelete() {
   dialogDelete.value = false;
   nextTick(() => {
-    editedItem.value = { ...defaultItem };
-    editedIndex.value = -1;
+    editedItem.value = null;
   });
+}
+
+function formatDate(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  }).format(date);
 }
 
 async function saveClient() {
   const { valid } = await form.value.validate();
-  if (!valid) return;
+  if (!valid || !editedItem.value) return;
 
-  if (editedIndex.value > -1) {
-    Object.assign(clients.value[editedIndex.value], editedItem.value);
-  } else {
-    clients.value.unshift(editedItem.value);
+  try {
+    if (editedItem.value.id) {
+      await dataStore.updateClient(editedItem.value.id, editedItem.value);
+    } else {
+      await dataStore.createClient(editedItem.value);
+    }
+    closeDialog();
+  } catch (error) {
+    console.error("Unable to save client", error);
   }
-  closeDialog();
 }
 
-function deleteClientConfirm() {
-  clients.value.splice(editedIndex.value, 1);
+async function deleteClientConfirm() {
+  if (!editedItem.value?.id) return;
+  try {
+    await dataStore.deleteClient(editedItem.value.id);
+  } catch (error) {
+    console.error("Unable to delete client", error);
+  }
   closeDelete();
 }
 </script>

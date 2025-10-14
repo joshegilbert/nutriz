@@ -36,7 +36,7 @@ import DayEditor from "./DayEditor.vue";
 
 // --- Props ---
 const props = defineProps({
-  clientId: { type: Number, required: true },
+  clientId: { type: [String, Number], required: true },
   initialDate: { type: Date, default: () => new Date() },
 });
 
