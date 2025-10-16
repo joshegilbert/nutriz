@@ -5,13 +5,34 @@
         <h1 class="text-h4 d-inline-block mr-4">Recipe Library 🍳</h1>
       </v-col>
       <v-col class="text-right">
-        <v-btn color="primary" @click="openAddDialog">Add Recipe</v-btn>
+        <v-btn
+          color="primary"
+          @click="openAddDialog"
+          :loading="isLoadingRecipes"
+        >
+          Add Recipe
+        </v-btn>
       </v-col>
     </v-row>
 
+    <v-alert
+      v-if="lastError"
+      type="error"
+      class="mb-4"
+      border="start"
+      variant="tonal"
+      :text="lastError"
+    />
+
     <v-card>
       <v-card-text>
-        <v-data-table :headers="headers" :items="recipesWithMacros" item-key="id">
+        <v-data-table
+          :headers="headers"
+          :items="recipesWithMacros"
+          item-key="id"
+          :loading="isLoadingRecipes"
+          loading-text="Loading recipes..."
+        >
           <template v-slot:item.macros="{ item }">
             Cal: {{ item.totalMacros.calories.toFixed(0) }} / Prot: {{ item.totalMacros.protein.toFixed(0) }}g / Carb: {{ item.totalMacros.carbs.toFixed(0) }}g / Fat: {{ item.totalMacros.fat.toFixed(0) }}g
           </template>
@@ -134,8 +155,22 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn color="blue-darken-1" variant="text" @click="closeDialog">Cancel</v-btn>
-          <v-btn color="blue-darken-1" variant="text" @click="saveRecipe">Save</v-btn>
+          <v-btn
+            color="blue-darken-1"
+            variant="text"
+            @click="closeDialog"
+            :disabled="isSubmitting"
+          >
+            Cancel
+          </v-btn>
+          <v-btn
+            color="blue-darken-1"
+            variant="text"
+            @click="saveRecipe"
+            :loading="isSubmitting"
+          >
+            Save
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -143,21 +178,30 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { useDataStore } from "@/stores/useDataStore";
 import { storeToRefs } from "pinia";
 
 const dataStore = useDataStore();
-const { recipes, foods, meals } = storeToRefs(dataStore);
+const { recipes, foods, meals, isLoadingRecipes, lastError } = storeToRefs(dataStore);
 
 const dialog = ref(false);
 const form = ref(null);
-const editedIndex = ref(-1);
+const editedItem = ref(null);
+const isSubmitting = ref(false);
 const defaultItem = { id: null, name: "", instructions: "", components: [] };
-const editedItem = ref(JSON.parse(JSON.stringify(defaultItem)));
 
-const formTitle = computed(() => (editedIndex.value === -1 ? "Add New Recipe" : "Edit Recipe"));
+const formTitle = computed(() =>
+  editedItem.value?.id ? "Edit Recipe" : "Add New Recipe"
+);
 const rules = { required: (value) => !!value || "Required." };
+
+onMounted(async () => {
+  if (!foods.value.length) {
+    await dataStore.fetchFoods().catch(() => {});
+  }
+  await dataStore.fetchRecipes().catch(() => {});
+});
 
 // --- HELPER FUNCTIONS ---
 function getMacros(component, forceRecalc = false) {
@@ -186,8 +230,10 @@ function getMacros(component, forceRecalc = false) {
 
 // --- COMPUTED PROPERTIES ---
 const recipeTotalMacros = computed(() => {
-  if (!editedItem.value.components) return { calories: 0, protein: 0, carbs: 0, fat: 0 };
-  
+  if (!editedItem.value?.components) {
+    return { calories: 0, protein: 0, carbs: 0, fat: 0 };
+  }
+
   return editedItem.value.components.reduce((totals, component) => {
     let componentMacros = { calories: 0, protein: 0, carbs: 0, fat: 0 };
     if (component.type === 'food' || component.type === 'custom') {
@@ -210,26 +256,32 @@ const recipeTotalMacros = computed(() => {
 });
 
 const recipesWithMacros = computed(() => {
-  return recipes.value.map(recipe => {
-    const totalMacros = (recipe.components || []).reduce((totals, component) => {
+  return recipes.value.map((recipe) => {
+    if (recipe.totalMacros) {
+      return recipe;
+    }
+    const totalMacros = (recipe.components || []).reduce(
+      (totals, component) => {
         let compMacros = { calories: 0, protein: 0, carbs: 0, fat: 0 };
         if (component.type === 'food' || component.type === 'custom') {
-            compMacros = getMacros(component);
+          compMacros = getMacros(component);
         } else if (component.type === 'meal' && component.components) {
-            component.components.forEach(foodComp => {
-                const foodMacros = getMacros(foodComp);
-                compMacros.calories += foodMacros.calories;
-                compMacros.protein += foodMacros.protein;
-                compMacros.carbs += foodMacros.carbs;
-                compMacros.fat += foodMacros.fat;
-            });
+          component.components.forEach((foodComp) => {
+            const foodMacros = getMacros(foodComp);
+            compMacros.calories += foodMacros.calories;
+            compMacros.protein += foodMacros.protein;
+            compMacros.carbs += foodMacros.carbs;
+            compMacros.fat += foodMacros.fat;
+          });
         }
         totals.calories += compMacros.calories;
         totals.protein += compMacros.protein;
         totals.carbs += compMacros.carbs;
         totals.fat += compMacros.fat;
         return totals;
-    }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
+      },
+      { calories: 0, protein: 0, carbs: 0, fat: 0 }
+    );
     return { ...recipe, totalMacros };
   });
 });
@@ -242,6 +294,7 @@ const headers = ref([
 
 // --- COMPONENT LOGIC ---
 function addComponent(type) {
+  if (!editedItem.value) return;
   const newComponent = { type, amount: 1, macros: { calories: 0, protein: 0, carbs: 0, fat: 0 }, expanded: false };
   if (type === 'food') newComponent.foodId = null;
   if (type === 'meal') {
@@ -257,11 +310,12 @@ function addComponent(type) {
 }
 
 function removeComponent(index) {
-  editedItem.value.components.splice(index, 1);
+  editedItem.value?.components.splice(index, 1);
 }
 
 function updateFoodComponent(index, foodId) {
-    const component = editedItem.value.components[index];
+    const component = editedItem.value?.components[index];
+    if (!component) return;
     component.foodId = foodId;
     recalculateMacros(component, true);
 }
@@ -272,7 +326,8 @@ function recalculateMacros(component, force = false) {
 }
 
 function updateMealComponent(componentIndex, mealId) {
-    const component = editedItem.value.components[componentIndex];
+    const component = editedItem.value?.components[componentIndex];
+    if (!component) return;
     component.mealId = mealId;
     const mealTemplate = meals.value.find(m => m.id === mealId);
     if (mealTemplate) {
@@ -290,22 +345,19 @@ function getMealName(mealId) {
 }
 function getFoodName(foodId) {
   const food = foods.value.find(f => f.id === foodId);
-  return food ? `${food.brand} ${food.name}` : 'Unknown Food';
+  return food ? food.name : 'Unknown Food';
 }
 function getFoodServing(foodId) {
-  return foods.value.find(f => f.id === foodId)?.servingUnit || '';
+  return foods.value.find(f => f.id === foodId)?.defaultServingSize || '';
 }
 
 // --- DIALOG AND SAVE LOGIC ---
 function openAddDialog() {
-  editedIndex.value = -1;
   editedItem.value = JSON.parse(JSON.stringify(defaultItem));
-  editedItem.value.id = Date.now();
   dialog.value = true;
 }
 
 function editRecipe(item) {
-  editedIndex.value = recipes.value.findIndex(r => r.id === item.id);
   const recipeToEdit = JSON.parse(JSON.stringify(item));
   (recipeToEdit.components || []).forEach(c => {
       c.expanded = false;
@@ -324,11 +376,13 @@ function editRecipe(item) {
 
 function closeDialog() {
   dialog.value = false;
+  editedItem.value = null;
 }
 
 async function saveRecipe() {
   const { valid } = await form.value.validate();
-  if (!valid) return;
+  if (!valid || !editedItem.value) return;
+  isSubmitting.value = true;
   const recipeToSave = JSON.parse(JSON.stringify(editedItem.value));
   (recipeToSave.components || []).forEach(c => {
       delete c.expanded;
@@ -336,18 +390,27 @@ async function saveRecipe() {
           c.components.forEach(sc => delete sc.expanded);
       }
   });
-  if (editedIndex.value > -1) {
-    recipes.value[editedIndex.value] = recipeToSave;
-  } else {
-    recipes.value.unshift(recipeToSave);
+  try {
+    if (recipeToSave.id) {
+      await dataStore.updateRecipe(recipeToSave.id, recipeToSave);
+    } else {
+      await dataStore.createRecipe(recipeToSave);
+    }
+    closeDialog();
+  } catch (error) {
+    console.error('Unable to save recipe', error);
+  } finally {
+    isSubmitting.value = false;
   }
-  closeDialog();
 }
 
-function deleteRecipe(item) {
-  const index = recipes.value.findIndex(r => r.id === item.id);
-  if (confirm('Are you sure you want to delete this recipe?')) {
-    if (index > -1) recipes.value.splice(index, 1);
+async function deleteRecipe(item) {
+  if (!item?.id) return;
+  if (!confirm('Are you sure you want to delete this recipe?')) return;
+  try {
+    await dataStore.deleteRecipe(item.id);
+  } catch (error) {
+    console.error('Unable to delete recipe', error);
   }
 }
 </script>

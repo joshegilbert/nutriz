@@ -363,9 +363,10 @@ const route = useRoute();
 const dataStore = useDataStore();
 const { clients, foods, meals, recipes } = storeToRefs(dataStore);
 
-const clientId = computed(() => Number(route.params.id));
+const clientId = computed(() => route.params.id);
 const client = computed(
-  () => clients.value.find((entry) => entry.id === clientId.value) || null
+  () =>
+    clients.value.find((entry) => String(entry.id) === clientId.value) || null
 );
 
 const program = ref(null);
