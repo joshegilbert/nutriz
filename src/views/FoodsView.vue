@@ -11,7 +11,19 @@
 
     <v-card>
       <v-card-text>
-        <v-data-table :headers="headers" :items="foods" item-key="id">
+        <v-row class="mb-4">
+          <v-col cols="12" sm="6" md="4">
+            <v-text-field
+              v-model="search"
+              label="Search foods"
+              prepend-inner-icon="mdi-magnify"
+              clearable
+              hide-details
+            />
+          </v-col>
+        </v-row>
+
+        <v-data-table :headers="headers" :items="filteredFoods" item-key="id">
           <template v-slot:item.serving="{ item }">
             {{ item.servingSize }} {{ item.servingUnit }} ({{ item.gramsPerServing }}g)
           </template>
@@ -106,6 +118,7 @@ const { foods } = storeToRefs(dataStore);
 const dialog = ref(false);
 const form = ref(null);
 const editedIndex = ref(-1);
+const search = ref("");
 
 const defaultItem = {
     id: null,
@@ -122,12 +135,22 @@ const formTitle = computed(() => (editedIndex.value === -1 ? "Add New Food" : "E
 const rules = { required: (value) => !!value || "Required." };
 
 const headers = ref([
-  { title: "Brand", key: "brand" },
   { title: "Food Item", key: "name", align: "start" },
+  { title: "Brand", key: "brand" },
   { title: "Serving", key: "serving", sortable: false },
   { title: "Macros (per Serving)", key: "macros", sortable: false },
   { title: "Actions", key: "actions", sortable: false },
 ]);
+
+const filteredFoods = computed(() => {
+  const term = search.value.trim().toLowerCase();
+  if (!term) return foods.value;
+  return foods.value.filter((item) => {
+    const name = item.name?.toLowerCase() ?? "";
+    const brand = item.brand?.toLowerCase() ?? "";
+    return name.includes(term) || brand.includes(term);
+  });
+});
 
 function openAddDialog() {
   editedIndex.value = -1;

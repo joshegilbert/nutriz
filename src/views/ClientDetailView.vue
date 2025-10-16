@@ -18,6 +18,15 @@
             >
               {{ client.status }}
             </v-chip>
+            <v-btn
+              variant="text"
+              class="ml-2"
+              color="primary"
+              prepend-icon="mdi-account-box-outline"
+              @click="aboutDialog = true"
+            >
+              About
+            </v-btn>
             <v-spacer></v-spacer>
             <v-btn
               :to="`/clients/${client.id}/plan`"
@@ -37,6 +46,99 @@
           <v-btn value="month" prepend-icon="mdi-calendar-month">Month View</v-btn>
         </v-btn-toggle>
       </v-row>
+
+      <v-dialog v-model="aboutDialog" max-width="520">
+        <v-card>
+          <v-card-title class="text-h6">
+            About {{ client.name }}
+          </v-card-title>
+          <v-card-text>
+            <div class="mb-4">
+              <h3 class="text-subtitle-1 font-weight-medium mb-1">Status</h3>
+              <p class="text-body-2 mb-0">
+                {{ client.status || "Not set" }}
+              </p>
+            </div>
+
+            <v-expansion-panels multiple>
+              <v-expansion-panel>
+                <v-expansion-panel-title>
+                  Program Details
+                </v-expansion-panel-title>
+                <v-expansion-panel-text>
+                  <v-list density="compact">
+                    <v-list-item>
+                      <v-list-item-title>Start Day</v-list-item-title>
+                      <v-list-item-subtitle>{{ programStartLabel }}</v-list-item-subtitle>
+                    </v-list-item>
+                    <v-list-item>
+                      <v-list-item-title>Length</v-list-item-title>
+                      <v-list-item-subtitle>{{ programLengthLabel }}</v-list-item-subtitle>
+                    </v-list-item>
+                    <v-list-item>
+                      <v-list-item-title>End Day</v-list-item-title>
+                      <v-list-item-subtitle>{{ programEndLabel }}</v-list-item-subtitle>
+                    </v-list-item>
+                  </v-list>
+                  <p v-if="!primaryProgram" class="text-body-2 mb-0 mt-2">
+                    No program has been assigned to this client yet.
+                  </p>
+                </v-expansion-panel-text>
+              </v-expansion-panel>
+
+              <v-expansion-panel>
+                <v-expansion-panel-title>
+                  Personal Information
+                </v-expansion-panel-title>
+                <v-expansion-panel-text>
+                  <v-list density="compact">
+                    <v-list-item>
+                      <v-list-item-title>Age</v-list-item-title>
+                      <v-list-item-subtitle>{{ personalInfo.age }}</v-list-item-subtitle>
+                    </v-list-item>
+                    <v-list-item>
+                      <v-list-item-title>Gender</v-list-item-title>
+                      <v-list-item-subtitle>{{ personalInfo.gender }}</v-list-item-subtitle>
+                    </v-list-item>
+                    <v-list-item>
+                      <v-list-item-title>Weight</v-list-item-title>
+                      <v-list-item-subtitle>{{ personalInfo.weight }}</v-list-item-subtitle>
+                    </v-list-item>
+                    <v-list-item>
+                      <v-list-item-title>State</v-list-item-title>
+                      <v-list-item-subtitle>{{ personalInfo.state }}</v-list-item-subtitle>
+                    </v-list-item>
+                  </v-list>
+                </v-expansion-panel-text>
+              </v-expansion-panel>
+
+              <v-expansion-panel>
+                <v-expansion-panel-title>
+                  Goals
+                </v-expansion-panel-title>
+                <v-expansion-panel-text>
+                  <div v-if="goalList.length > 0">
+                    <v-list density="compact">
+                      <v-list-item v-for="goal in goalList" :key="goal">
+                        <v-list-item-title>{{ goal }}</v-list-item-title>
+                      </v-list-item>
+                    </v-list>
+                  </div>
+                  <p v-else class="text-body-2 mb-0">
+                    No goals recorded.
+                  </p>
+                </v-expansion-panel-text>
+              </v-expansion-panel>
+            </v-expansion-panels>
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer />
+            <v-btn variant="text" color="primary" @click="aboutDialog = false">
+              Close
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
 
       <!-- Calendar Rendering -->
       <v-row justify="center">
@@ -78,12 +180,65 @@ const dataStore = useDataStore();
 const { clients } = storeToRefs(dataStore);
 
 const viewMode = ref("week");
-
+const aboutDialog = ref(false);
 const selectedDate = ref(new Date());
 
 const client = computed(() =>
   clients.value.find((c) => c.id === Number(route.params.id))
 );
+
+const primaryProgram = computed(() => client.value?.programs?.[0] ?? null);
+
+const programStartLabel = computed(() => {
+  const start = primaryProgram.value?.startDate;
+  if (!start) return "Not set";
+  const parsed = new Date(start);
+  const time = parsed.getTime();
+  if (Number.isNaN(time)) return start;
+  return parsed.toLocaleDateString();
+});
+
+const programLengthLabel = computed(() => {
+  const length = primaryProgram.value?.length;
+  if (!length) return "Not set";
+  return `${length} day${length === 1 ? "" : "s"}`;
+});
+
+const programEndLabel = computed(() => {
+  const start = primaryProgram.value?.startDate;
+  const length = primaryProgram.value?.length;
+  if (!start || !length) return "Not set";
+  const parsed = new Date(start);
+  const time = parsed.getTime();
+  if (Number.isNaN(time)) return "Not set";
+  parsed.setDate(parsed.getDate() + length - 1);
+  return parsed.toLocaleDateString();
+});
+
+const personalInfo = computed(() => {
+  const current = client.value || {};
+  const weight = current.weight;
+  const formattedWeight =
+    typeof weight === "number"
+      ? `${weight} lbs`
+      : weight || "Not provided";
+
+  return {
+    age: current.age ?? "Not provided",
+    gender: current.gender ?? "Not provided",
+    weight: formattedWeight,
+    state: current.state ?? "Not provided",
+  };
+});
+
+const goalList = computed(() => {
+  const goals = client.value?.goals;
+  if (Array.isArray(goals)) return goals.length ? goals : [];
+  if (typeof goals === "string" && goals.trim().length > 0) {
+    return goals.split("\n").map((goal) => goal.trim()).filter(Boolean);
+  }
+  return [];
+});
 
 function openWeekView(date) {
   selectedDate.value = new Date(date);
@@ -111,4 +266,3 @@ function openWeekView(date) {
   color: white;
 }
 </style>
-
