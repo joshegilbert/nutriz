@@ -111,9 +111,74 @@
 <script setup>
 import { ref, computed, nextTick } from "vue";
 import { useDataStore } from "@/stores/useDataStore";
+import { storeToRefs } from "pinia";
 
 // --- Get Data from the Store ---
-const { clients } = useDataStore();
+const dataStore = useDataStore();
+const { clients } = storeToRefs(dataStore);
+
+// --- Helpers ---
+function toLocalISODate(date) {
+  const target = date instanceof Date ? date : new Date(date);
+  const y = target.getFullYear();
+  const m = String(target.getMonth() + 1).padStart(2, "0");
+  const d = String(target.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function createEmptyMacros() {
+  return { calories: 0, protein: 0, carbs: 0, fat: 0 };
+}
+
+function createDefaultProgram(clientId, options = {}) {
+  const baseDate =
+    options.startDate instanceof Date
+      ? options.startDate
+      : options.startDate
+      ? new Date(options.startDate)
+      : new Date();
+
+  const start = Number.isNaN(baseDate.getTime()) ? new Date() : baseDate;
+  const length = options.length ?? 28;
+  const days = [];
+
+  for (let i = 0; i < length; i++) {
+    const day = new Date(start);
+    day.setDate(start.getDate() + i);
+    days.push({
+      date: toLocalISODate(day),
+      meals: [],
+      macros: createEmptyMacros(),
+      macrosSource: "auto",
+    });
+  }
+
+  return {
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    clientId,
+    startDate: toLocalISODate(start),
+    length,
+    days,
+  };
+}
+
+function buildNewClient() {
+  const id = Date.now();
+  const todayIso = toLocalISODate(new Date());
+  return {
+    id,
+    name: "",
+    email: "",
+    status: "Pending",
+    last_active: todayIso,
+    age: null,
+    gender: "",
+    weight: null,
+    state: "",
+    goals: [],
+    programs: [createDefaultProgram(id, { startDate: todayIso })],
+  };
+}
 
 // --- State Management ---
 const dialog = ref(false);
@@ -121,14 +186,7 @@ const dialogDelete = ref(false);
 const form = ref(null);
 const editedIndex = ref(-1);
 
-const defaultItem = {
-  id: null,
-  name: "",
-  email: "",
-  status: "Pending",
-  last_active: new Date().toISOString().slice(0, 10),
-};
-const editedItem = ref({ ...defaultItem });
+const editedItem = ref(buildNewClient());
 
 const formTitle = computed(() => {
   return editedIndex.value === -1 ? "Add New Client" : "Edit Client";
@@ -152,26 +210,26 @@ const headers = ref([
 // --- Component Methods ---
 function openAddDialog() {
   editedIndex.value = -1;
-  editedItem.value = { ...defaultItem, id: Date.now() };
+  editedItem.value = buildNewClient();
   dialog.value = true;
 }
 
 function editClient(item) {
   editedIndex.value = clients.value.indexOf(item);
-  editedItem.value = { ...item };
+  editedItem.value = JSON.parse(JSON.stringify(item));
   dialog.value = true;
 }
 
 function deleteClient(item) {
   editedIndex.value = clients.value.indexOf(item);
-  editedItem.value = { ...item };
+  editedItem.value = JSON.parse(JSON.stringify(item));
   dialogDelete.value = true;
 }
 
 function closeDialog() {
   dialog.value = false;
   nextTick(() => {
-    editedItem.value = { ...defaultItem };
+    editedItem.value = buildNewClient();
     editedIndex.value = -1;
   });
 }
@@ -179,7 +237,7 @@ function closeDialog() {
 function closeDelete() {
   dialogDelete.value = false;
   nextTick(() => {
-    editedItem.value = { ...defaultItem };
+    editedItem.value = buildNewClient();
     editedIndex.value = -1;
   });
 }
@@ -191,7 +249,7 @@ async function saveClient() {
   if (editedIndex.value > -1) {
     Object.assign(clients.value[editedIndex.value], editedItem.value);
   } else {
-    clients.value.unshift(editedItem.value);
+    clients.value.unshift(JSON.parse(JSON.stringify(editedItem.value)));
   }
   closeDialog();
 }
