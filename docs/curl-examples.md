@@ -2,6 +2,22 @@
 
 All commands assume the backend is running on `http://localhost:5000`.
 
+## Seed the database with demo data
+
+Populate a nutritionist account, clients, foods, and recipes in one step:
+
+```bash
+cd nutriz-backend
+npm run seed:sample
+```
+
+The script creates (or reuses) a nutritionist with the email `coach@nutriz.demo`
+and password `DemoPass123!`. Override the defaults with `SEED_EMAIL` and
+`SEED_PASSWORD` in your `.env` file if desired.
+
+After seeding, log in through the frontend with the same credentials or capture a
+JWT as shown below.
+
 ## Register a nutritionist account
 ```bash
 curl -X POST http://localhost:5000/api/auth/register \
