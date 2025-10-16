@@ -1,65 +1,181 @@
 <template>
-  <v-container class="d-flex justify-center align-center h-100">
-    <v-card width="400" title="Login to Nutriz 🥗">
-      <v-card-text>
-        <v-alert
-          v-if="errorMessage"
-          type="error"
-          class="mb-4"
-          border="start"
-          :text="errorMessage"
-        />
-        <v-text-field
-          v-model="email"
-          label="Email"
-          prepend-inner-icon="mdi-email-outline"
-          autocomplete="username"
-        ></v-text-field>
-        <v-text-field
-          v-model="password"
-          label="Password"
-          type="password"
-          prepend-inner-icon="mdi-lock-outline"
-          autocomplete="current-password"
-        ></v-text-field>
-        <v-btn
-          block
-          color="primary"
-          class="mt-2"
-          :loading="isSubmitting"
-          @click="handleLogin"
-        >
-          Login
-        </v-btn>
-      </v-card-text>
-    </v-card>
+  <v-container class="auth-wrapper" fluid>
+    <v-row>
+      <!-- Left hero panel (hidden on small screens) -->
+      <v-col cols="12" md="6" class="hero-panel d-none d-md-flex">
+        <div class="hero-overlay"></div>
+        <div class="hero-content">
+          <v-chip class="hero-chip" color="white" variant="text">Coach Workspace</v-chip>
+          <h1 class="hero-title">Simplify nutrition planning for your clients</h1>
+          <p class="hero-subtitle">
+            Manage foods, recipes, and client plans in one place. Clean, fast,
+            and built for everyday coaching workflows.
+          </p>
+          <ul class="hero-bullets">
+            <li>
+              <v-icon>mdi-food-apple-outline</v-icon>
+              <div>
+                <strong>Structured Foods & Recipes</strong>
+                <p>Keep go-to items organized with macros per serving.</p>
+              </div>
+            </li>
+            <li>
+              <v-icon>mdi-account-group-outline</v-icon>
+              <div>
+                <strong>Client-Centric</strong>
+                <p>Track client goals, notes, and build personalized plans.</p>
+              </div>
+            </li>
+            <li>
+              <v-icon>mdi-clipboard-text-outline</v-icon>
+              <div>
+                <strong>Shareable Summaries</strong>
+                <p>Export clean daily/weekly plan summaries in seconds.</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </v-col>
+
+      <!-- Right form panel -->
+      <v-col cols="12" md="6" class="form-panel">
+        <div class="form-wrapper">
+          <v-card elevation="2" class="auth-card pa-6">
+            <div class="card-header mb-4">
+              <h2>{{ mode === 'login' ? 'Welcome back' : 'Create your account' }}</h2>
+              <p v-if="mode === 'login'">Login to continue to your dashboard.</p>
+              <p v-else>Get started in under a minute.</p>
+            </div>
+
+            <v-alert
+              v-if="errorMessage"
+              type="error"
+              class="mb-4"
+              border="start"
+              :text="errorMessage"
+            />
+
+            <v-form @submit.prevent="handleSubmit">
+              <v-text-field
+                v-model="email"
+                label="Email"
+                prepend-inner-icon="mdi-email-outline"
+                autocomplete="username"
+                :disabled="isSubmitting"
+                required
+              />
+
+              <v-text-field
+                v-model="password"
+                :type="showPassword ? 'text' : 'password'"
+                label="Password"
+                prepend-inner-icon="mdi-lock-outline"
+                :append-inner-icon="showPassword ? 'mdi-eye-off-outline' : 'mdi-eye-outline'"
+                @click:append-inner="showPassword = !showPassword"
+                :autocomplete="mode === 'login' ? 'current-password' : 'new-password'"
+                :disabled="isSubmitting"
+                required
+              />
+
+              <v-text-field
+                v-if="mode === 'register'"
+                v-model="confirmPassword"
+                :type="showPassword ? 'text' : 'password'"
+                label="Confirm Password"
+                prepend-inner-icon="mdi-lock-check-outline"
+                :append-inner-icon="showPassword ? 'mdi-eye-off-outline' : 'mdi-eye-outline'"
+                @click:append-inner="showPassword = !showPassword"
+                autocomplete="new-password"
+                :disabled="isSubmitting"
+                required
+              />
+
+              <v-btn
+                type="submit"
+                block
+                color="primary"
+                class="mt-2"
+                :loading="isSubmitting"
+              >
+                {{ mode === 'login' ? 'Login' : 'Create Account' }}
+              </v-btn>
+            </v-form>
+
+            <div class="switcher mt-5">
+              <span v-if="mode === 'login'">
+                New here?
+                <v-btn variant="text" size="small" class="px-2" @click="switchMode('register')">
+                  Create an account
+                </v-btn>
+              </span>
+              <span v-else>
+                Already have an account?
+                <v-btn variant="text" size="small" class="px-2" @click="switchMode('login')">
+                  Login instead
+                </v-btn>
+              </span>
+            </div>
+
+            <div class="footer-copy">
+              <small>Use demo: coach@nutriz.com / DemoPass123!</small>
+            </div>
+          </v-card>
+        </div>
+      </v-col>
+    </v-row>
   </v-container>
 </template>
 
 <script setup>
-import { ref } from "vue";
-import { useRouter } from "vue-router";
-import { useAuthStore } from "@/stores/authStore";
+import { ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { useAuthStore } from '@/stores/authStore';
 
+const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 
-const email = ref("");
-const password = ref("");
-const errorMessage = ref("");
+const mode = ref('login'); // 'login' | 'register'
+const email = ref('');
+const password = ref('');
+const confirmPassword = ref('');
+const errorMessage = ref('');
 const isSubmitting = ref(false);
+const showPassword = ref(false);
 
-async function handleLogin() {
-  if (!email.value || !password.value || isSubmitting.value) return;
+function switchMode(next) {
+  mode.value = next;
+  errorMessage.value = '';
+}
+
+async function handleSubmit() {
+  if (isSubmitting.value) return;
+  errorMessage.value = '';
+
+  if (!email.value || !password.value) {
+    errorMessage.value = 'Please enter your email and password.';
+    return;
+  }
+
+  if (mode.value === 'register' && password.value !== confirmPassword.value) {
+    errorMessage.value = 'Passwords do not match.';
+    return;
+  }
+
   isSubmitting.value = true;
-  errorMessage.value = "";
   try {
-    await authStore.login({ email: email.value, password: password.value });
+    if (mode.value === 'login') {
+      await authStore.login({ email: email.value, password: password.value });
+    } else {
+      await authStore.register({ email: email.value, password: password.value });
+    }
+
     await authStore.fetchCurrentUser().catch(() => {});
-    await router.replace("/clients");
+
+    const redirect = typeof route.query.redirect === 'string' && route.query.redirect ? route.query.redirect : '/clients';
+    await router.replace(redirect);
   } catch (error) {
-    errorMessage.value =
-      authStore.error || "Invalid credentials. Please try again.";
+    errorMessage.value = authStore.error || (mode.value === 'login' ? 'Invalid credentials. Please try again.' : 'Unable to register. Please try again.');
   } finally {
     isSubmitting.value = false;
   }

@@ -50,6 +50,21 @@ export const useAuthStore = defineStore('auth', () => {
     }
   };
 
+  const register = async ({ email, password, role = 'nutritionist' }) => {
+    status.value = 'loading';
+    error.value = '';
+    try {
+      const { data } = await api.post('/auth/register', { email, password, role });
+      setSession(data);
+      status.value = 'authenticated';
+      return data;
+    } catch (err) {
+      status.value = 'error';
+      error.value = err.response?.data?.message || 'Unable to register. Please try again.';
+      throw err;
+    }
+  };
+
   const fetchCurrentUser = async () => {
     if (!token.value) return null;
     try {
@@ -79,6 +94,7 @@ export const useAuthStore = defineStore('auth', () => {
     error,
     isAuthenticated,
     login,
+    register,
     fetchCurrentUser,
     logout,
   };
