@@ -1,6 +1,14 @@
-starting a server for backend: 
-    cd nutriz-backend
-    node server.js
+Backend setup:
+  cd nutriz-backend
+  npm install
+  # Create .env with at least MONGO_URI and JWT_SECRET
+  npm run start
 
-starting a server for frontend: 
-    npm run dev
+Seed demo content:
+  cd nutriz-backend
+  npm run seed:sample
+  # Logs credentials (coach@nutriz.demo / DemoPass123!) unless overridden
+
+Frontend setup:
+  npm install
+  npm run dev -- --host

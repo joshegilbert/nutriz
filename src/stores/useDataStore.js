@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import { toRaw } from "vue";
+import api from "@/services/api";
 
 function createId(prefix = "id") {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
@@ -44,101 +45,18 @@ export const useDataStore = defineStore("data", () => {
   // ---------------------------------------------------------------------------
   //  DATA LIBRARIES
   // ---------------------------------------------------------------------------
-  const foods = ref([
-    {
-      id: 101,
-      brand: "Fage",
-      name: "Total 2% Greek Yogurt",
-      servingSize: 1,
-      servingUnit: "170g container",
-      macrosPerServing: {
-        calories: 150,
-        protein: 20,
-        carbs: 7,
-        fat: 4,
-        fiber: 0,
-      },
-    },
-    {
-      id: 102,
-      brand: "Kirkland Signature",
-      name: "Organic Berries",
-      servingSize: 1,
-      servingUnit: "cup",
-      macrosPerServing: {
-        calories: 70,
-        protein: 1,
-        carbs: 17,
-        fat: 0.5,
-        fiber: 4,
-      },
-    },
-    {
-      id: 103,
-      brand: "Nature Valley",
-      name: "Protein Chewy Bars",
-      servingSize: 1,
-      servingUnit: "bar",
-      macrosPerServing: {
-        calories: 190,
-        protein: 10,
-        carbs: 14,
-        fat: 12,
-        fiber: 5,
-      },
-    },
-    {
-      id: 104,
-      brand: "Generic",
-      name: "Chicken Breast",
-      servingSize: 100,
-      servingUnit: "g",
-      macrosPerServing: {
-        calories: 165,
-        protein: 31,
-        carbs: 0,
-        fat: 3.6,
-        fiber: 0,
-      },
-    },
-  ]);
+  const foods = ref([]);
 
-  const meals = ref([
-    {
-      id: 201,
-      name: "Yogurt Bowl",
-      components: [
-        { foodId: 101, amount: 1 },
-        { foodId: 102, amount: 0.5 },
-      ],
-    },
-  ]);
+  const meals = ref([]);
 
-  const recipes = ref([
-    {
-      id: 301,
-      name: "Simple Grilled Chicken",
-      instructions: "1. Season chicken breast. 2. Grill until cooked through.",
-      components: [{ type: "food", foodId: 104, amount: 1.5 }],
-    },
-  ]);
+  const recipes = ref([]);
 
-  const clients = ref([
-    {
-      id: 1,
-      name: "John Doe",
-      status: "Active",
-      programs: [
-        {
-          id: 1,
-          clientId: 1,
-          startDate: "2025-10-02",
-          length: 28,
-          days: [],
-        },
-      ],
-    },
-  ]);
+  const clients = ref([]);
+
+  const isLoadingClients = ref(false);
+  const isLoadingFoods = ref(false);
+  const isLoadingRecipes = ref(false);
+  const lastError = ref("");
 
   // Clipboard for meals (copy/paste across the day editor)
   const mealClipboard = ref(null);
@@ -202,11 +120,46 @@ export const useDataStore = defineStore("data", () => {
     return program;
   }
 
+  function createBlankProgram({
+    clientId,
+    startDate = toLocalISODate(new Date()),
+    length = 7,
+  } = {}) {
+    const days = [];
+    const start = parseLocalISO(startDate);
+    for (let i = 0; i < length; i++) {
+      const date = new Date(start);
+      date.setDate(start.getDate() + i);
+      days.push(
+        toDay({
+          date: toLocalISODate(date),
+          meals: [],
+          macros: createMacroTotals(),
+          macrosSource: "auto",
+        })
+      );
+    }
+
+    return {
+      id: createId("program"),
+      clientId,
+      startDate,
+      length,
+      days,
+      macros: createMacroTotals(),
+      macrosSource: "auto",
+    };
+  }
+
   // ---------------------------------------------------------------------------
   //  INITIAL DATA SHAPING
   // ---------------------------------------------------------------------------
-  function initializeProgramData() {
-    for (const client of clients.value) {
+  function hydrateClientPrograms(clientList = clients.value) {
+    for (const client of clientList) {
+      if (!Array.isArray(client.programs) || client.programs.length === 0) {
+        continue;
+      }
+
       for (const program of client.programs) {
         const start = new Date(program.startDate);
         const hydrated = [];
@@ -231,7 +184,170 @@ export const useDataStore = defineStore("data", () => {
     }
   }
 
-  initializeProgramData();
+  function normaliseClient(document, previous = null) {
+    if (!document && !previous) return null;
+    const existing = previous || {};
+    const id = document?._id || document?.id || existing.id || createId("client");
+
+    const dobIso = document?.dob
+      ? toLocalISODate(new Date(document.dob))
+      : existing.dob || "";
+
+    const createdIso = document?.createdAt
+      ? toLocalISODate(new Date(document.createdAt))
+      : existing.last_active || toLocalISODate(new Date());
+
+    const programSource = document?.programs?.length
+      ? document.programs.map((program) => ensureProgramStructure(cloneDeep(program)))
+      : existing.programs?.length
+      ? existing.programs.map((program) => ensureProgramStructure(cloneDeep(program)))
+      : [createBlankProgram({ clientId: id })];
+
+    return {
+      id,
+      name: document?.name ?? existing.name ?? "",
+      status: existing.status || "Active",
+      email: document?.contact?.email ?? existing.email ?? "",
+      phone: document?.contact?.phone ?? existing.phone ?? "",
+      dob: dobIso,
+      goals: document?.goals ?? existing.goals ?? [],
+      notes: document?.notes ?? existing.notes ?? "",
+      last_active: createdIso,
+      programs: programSource,
+      raw: document || existing.raw || null,
+    };
+  }
+
+  function serialiseClient(payload = {}) {
+    const body = {
+      name: payload.name,
+      dob: payload.dob || null,
+      contact: {
+        email: payload.email || "",
+        phone: payload.phone || "",
+      },
+      goals: payload.goals || [],
+      notes: payload.notes || "",
+    };
+
+    if (!body.contact.phone) delete body.contact.phone;
+    if (!body.contact.email) delete body.contact.email;
+    if (!Object.keys(body.contact).length) delete body.contact;
+
+    return body;
+  }
+
+  function normaliseFood(document) {
+    if (!document) return null;
+    return {
+      id: document._id || document.id,
+      name: document.name || "",
+      category: document.category || "Other",
+      defaultServingSize: document.defaultServingSize || "1 serving",
+      servingUnit: document.defaultServingSize || "1 serving",
+      brand: document.brand || "",
+      caloriesPerServing: document.caloriesPerServing || 0,
+      proteinPerServing: document.proteinPerServing || 0,
+      carbsPerServing: document.carbsPerServing || 0,
+      fatPerServing: document.fatPerServing || 0,
+      macrosPerServing: {
+        calories: document.caloriesPerServing || 0,
+        protein: document.proteinPerServing || 0,
+        carbs: document.carbsPerServing || 0,
+        fat: document.fatPerServing || 0,
+      },
+    };
+  }
+
+  function serialiseFood(payload = {}) {
+    return {
+      name: payload.name,
+      category: payload.category || "Other",
+      defaultServingSize: payload.defaultServingSize || "1 serving",
+      caloriesPerServing: Number(payload.caloriesPerServing) || 0,
+      proteinPerServing: Number(payload.proteinPerServing) || 0,
+      carbsPerServing: Number(payload.carbsPerServing) || 0,
+      fatPerServing: Number(payload.fatPerServing) || 0,
+    };
+  }
+
+  function normaliseRecipe(document) {
+    if (!document) return null;
+
+    const components = (document.ingredients || []).map((ingredient) => {
+      const food = ingredient.foodItem || {};
+      const quantity = ingredient.quantity || 1;
+      return {
+        id: ingredient._id || createId("component"),
+        type: "food",
+        foodId: food._id || ingredient.foodItem,
+        amount: quantity,
+        notes: ingredient.notes || ingredient.amount || "",
+        macros: {
+          calories: (food.caloriesPerServing || 0) * quantity,
+          protein: (food.proteinPerServing || 0) * quantity,
+          carbs: (food.carbsPerServing || 0) * quantity,
+          fat: (food.fatPerServing || 0) * quantity,
+        },
+        macrosSource: "auto",
+        expanded: false,
+      };
+    });
+
+    const totalMacros = components.reduce(
+      (acc, component) => {
+        acc.calories += component.macros?.calories || 0;
+        acc.protein += component.macros?.protein || 0;
+        acc.carbs += component.macros?.carbs || 0;
+        acc.fat += component.macros?.fat || 0;
+        return acc;
+      },
+      createMacroTotals()
+    );
+
+    return {
+      id: document._id || document.id,
+      name: document.name || "",
+      description: document.description || "",
+      instructions: document.instructions || "",
+      components,
+      tags: document.tags || [],
+      totalMacros,
+    };
+  }
+
+  function serialiseRecipe(payload = {}) {
+    const ingredients = [];
+    (payload.components || []).forEach((component) => {
+      if (component.type === "food" && component.foodId) {
+        ingredients.push({
+          foodItem: component.foodId,
+          amount: component.notes || "",
+          quantity: Number(component.amount) || 1,
+          notes: component.notes || "",
+        });
+      } else if (component.type === "meal" && Array.isArray(component.components)) {
+        component.components.forEach((item) => {
+          if (item.foodId) {
+            ingredients.push({
+              foodItem: item.foodId,
+              amount: item.notes || "",
+              quantity: Number(item.amount) || 1,
+              notes: item.notes || "",
+            });
+          }
+        });
+      }
+    });
+
+    return {
+      name: payload.name,
+      description: payload.description || "",
+      instructions: payload.instructions || "",
+      ingredients,
+      tags: payload.tags || [],
+    };
+  }
 
   // ---------------------------------------------------------------------------
   //  UTILITIES
@@ -347,9 +463,236 @@ export const useDataStore = defineStore("data", () => {
     day.macros = calcDayTotals(day);
   }
 
+  function setLastError(err) {
+    lastError.value = err || "";
+  }
+
   // ---------------------------------------------------------------------------
   //  ACTIONS
   // ---------------------------------------------------------------------------
+  async function fetchClients({ force = false } = {}) {
+    if (clients.value.length && !force) return clients.value;
+    isLoadingClients.value = true;
+    setLastError("");
+    try {
+      const { data } = await api.get("/clients");
+      const mapped = data.map((doc) => normaliseClient(doc));
+      hydrateClientPrograms(mapped);
+      clients.value = mapped;
+      return clients.value;
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || "Failed to load clients.";
+      setLastError(message);
+      throw error;
+    } finally {
+      isLoadingClients.value = false;
+    }
+  }
+
+  async function createClient(payload) {
+    isLoadingClients.value = true;
+    setLastError("");
+    try {
+      const body = serialiseClient(payload);
+      const { data } = await api.post("/clients", body);
+      const normalised = normaliseClient(data, payload);
+      hydrateClientPrograms([normalised]);
+      clients.value = [normalised, ...clients.value];
+      return normalised;
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || "Failed to create client.";
+      setLastError(message);
+      throw error;
+    } finally {
+      isLoadingClients.value = false;
+    }
+  }
+
+  async function updateClient(clientId, payload) {
+    if (!clientId) return null;
+    isLoadingClients.value = true;
+    setLastError("");
+    try {
+      const body = serialiseClient(payload);
+      const { data } = await api.put(`/clients/${clientId}`, body);
+      const previous = clients.value.find((client) => client.id === clientId);
+      const updated = normaliseClient(data, previous);
+      hydrateClientPrograms([updated]);
+      const index = clients.value.findIndex((client) => client.id === clientId);
+      if (index !== -1) {
+        clients.value.splice(index, 1, updated);
+      }
+      return updated;
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || "Failed to update client.";
+      setLastError(message);
+      throw error;
+    } finally {
+      isLoadingClients.value = false;
+    }
+  }
+
+  async function deleteClient(clientId) {
+    if (!clientId) return;
+    isLoadingClients.value = true;
+    setLastError("");
+    try {
+      await api.delete(`/clients/${clientId}`);
+      clients.value = clients.value.filter((client) => client.id !== clientId);
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || "Failed to delete client.";
+      setLastError(message);
+      throw error;
+    } finally {
+      isLoadingClients.value = false;
+    }
+  }
+
+  async function fetchFoods({ force = false } = {}) {
+    if (foods.value.length && !force) return foods.value;
+    isLoadingFoods.value = true;
+    setLastError("");
+    try {
+      const { data } = await api.get("/fooditems");
+      foods.value = data.map((doc) => normaliseFood(doc));
+      return foods.value;
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || "Failed to load foods.";
+      setLastError(message);
+      throw error;
+    } finally {
+      isLoadingFoods.value = false;
+    }
+  }
+
+  async function createFood(payload) {
+    isLoadingFoods.value = true;
+    setLastError("");
+    try {
+      const body = serialiseFood(payload);
+      const { data } = await api.post("/fooditems", body);
+      const normalised = normaliseFood(data);
+      foods.value = [normalised, ...foods.value];
+      return normalised;
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || "Failed to create food item.";
+      setLastError(message);
+      throw error;
+    } finally {
+      isLoadingFoods.value = false;
+    }
+  }
+
+  async function updateFood(foodId, payload) {
+    if (!foodId) return null;
+    isLoadingFoods.value = true;
+    setLastError("");
+    try {
+      const body = serialiseFood(payload);
+      const { data } = await api.put(`/fooditems/${foodId}`, body);
+      const updated = normaliseFood(data);
+      const index = foods.value.findIndex((food) => food.id === foodId);
+      if (index !== -1) {
+        foods.value.splice(index, 1, updated);
+      }
+      return updated;
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || "Failed to update food item.";
+      setLastError(message);
+      throw error;
+    } finally {
+      isLoadingFoods.value = false;
+    }
+  }
+
+  async function deleteFood(foodId) {
+    if (!foodId) return;
+    isLoadingFoods.value = true;
+    setLastError("");
+    try {
+      await api.delete(`/fooditems/${foodId}`);
+      foods.value = foods.value.filter((food) => food.id !== foodId);
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || "Failed to delete food item.";
+      setLastError(message);
+      throw error;
+    } finally {
+      isLoadingFoods.value = false;
+    }
+  }
+
+  async function fetchRecipes({ force = false } = {}) {
+    if (recipes.value.length && !force) return recipes.value;
+    isLoadingRecipes.value = true;
+    setLastError("");
+    try {
+      const { data } = await api.get("/recipes");
+      recipes.value = data.map((doc) => normaliseRecipe(doc));
+      return recipes.value;
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || "Failed to load recipes.";
+      setLastError(message);
+      throw error;
+    } finally {
+      isLoadingRecipes.value = false;
+    }
+  }
+
+  async function createRecipe(payload) {
+    isLoadingRecipes.value = true;
+    setLastError("");
+    try {
+      const body = serialiseRecipe(payload);
+      const { data } = await api.post("/recipes", body);
+      const normalised = normaliseRecipe(data);
+      recipes.value = [normalised, ...recipes.value];
+      return normalised;
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || "Failed to create recipe.";
+      setLastError(message);
+      throw error;
+    } finally {
+      isLoadingRecipes.value = false;
+    }
+  }
+
+  async function updateRecipe(recipeId, payload) {
+    if (!recipeId) return null;
+    isLoadingRecipes.value = true;
+    setLastError("");
+    try {
+      const body = serialiseRecipe(payload);
+      const { data } = await api.put(`/recipes/${recipeId}`, body);
+      const updated = normaliseRecipe(data);
+      const index = recipes.value.findIndex((recipe) => recipe.id === recipeId);
+      if (index !== -1) {
+        recipes.value.splice(index, 1, updated);
+      }
+      return updated;
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || "Failed to update recipe.";
+      setLastError(message);
+      throw error;
+    } finally {
+      isLoadingRecipes.value = false;
+    }
+  }
+
+  async function deleteRecipe(recipeId) {
+    if (!recipeId) return;
+    isLoadingRecipes.value = true;
+    setLastError("");
+    try {
+      await api.delete(`/recipes/${recipeId}`);
+      recipes.value = recipes.value.filter((recipe) => recipe.id !== recipeId);
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || "Failed to delete recipe.";
+      setLastError(message);
+      throw error;
+    } finally {
+      isLoadingRecipes.value = false;
+    }
+  }
   async function getProgramByClientId(clientId) {
     const client = clients.value.find((c) => c.id === clientId);
     if (!client) return null;
@@ -524,6 +867,22 @@ export const useDataStore = defineStore("data", () => {
     meals,
     recipes,
     clients,
+    isLoadingClients,
+    isLoadingFoods,
+    isLoadingRecipes,
+    lastError,
+    fetchClients,
+    createClient,
+    updateClient,
+    deleteClient,
+    fetchFoods,
+    createFood,
+    updateFood,
+    deleteFood,
+    fetchRecipes,
+    createRecipe,
+    updateRecipe,
+    deleteRecipe,
     // lookups & math
     getItemDetails,
     calculateItemMacros,
