@@ -1,142 +1,43 @@
 <template>
-  <v-container class="auth-wrapper pa-0" fluid>
-    <v-row class="fill-height g-0" no-gutters>
-      <v-col cols="12" md="6" class="hero-panel d-none d-md-flex">
-        <div class="hero-overlay"></div>
-        <div class="hero-content">
-          <v-chip
-            class="hero-chip mb-6"
-            color="white"
-            prepend-icon="mdi-leaf"
-            size="large"
-            variant="text"
-          >
-            Nutriz Coach Suite
-          </v-chip>
-          <h1 class="hero-title">
-            Design nourishing programs with confidence.
-          </h1>
-          <p class="hero-subtitle">
-            Streamline onboarding, build data-backed meal plans, and deliver
-            memorable client experiences — all from one professional workspace.
-          </p>
-          <ul class="hero-bullets">
-            <li v-for="item in heroHighlights" :key="item.title">
-              <v-icon icon="mdi-check-circle-outline" size="22" />
-              <div>
-                <strong>{{ item.title }}</strong>
-                <p>{{ item.copy }}</p>
-              </div>
-            </li>
-          </ul>
-        </div>
-      </v-col>
-
-      <v-col cols="12" md="6" class="form-panel">
-        <div class="form-wrapper">
-          <v-card class="auth-card" elevation="12">
-            <v-card-text>
-              <div class="card-header">
-                <h2>{{ headline }}</h2>
-                <p>{{ helperText }}</p>
-              </div>
-
-              <v-alert
-                v-if="errorMessage"
-                border="start"
-                class="mb-4"
-                density="comfortable"
-                type="error"
-                :text="errorMessage"
-              />
-
-              <v-form @submit.prevent="handleSubmit">
-                <v-text-field
-                  v-model="email"
-                  class="mb-3"
-                  label="Email"
-                  prepend-inner-icon="mdi-email-outline"
-                  autocomplete="username"
-                  density="comfortable"
-                  variant="outlined"
-                />
-
-                <v-text-field
-                  v-model="password"
-                  class="mb-3"
-                  :label="isRegistering ? 'Password (min 6 characters)' : 'Password'"
-                  type="password"
-                  prepend-inner-icon="mdi-lock-outline"
-                  :autocomplete="isRegistering ? 'new-password' : 'current-password'"
-                  density="comfortable"
-                  variant="outlined"
-                />
-
-                <v-text-field
-                  v-if="isRegistering"
-                  v-model="confirmPassword"
-                  class="mb-3"
-                  label="Confirm password"
-                  type="password"
-                  prepend-inner-icon="mdi-lock-check-outline"
-                  autocomplete="new-password"
-                  density="comfortable"
-                  variant="outlined"
-                />
-
-                <v-select
-                  v-if="isRegistering"
-                  v-model="role"
-                  class="mb-3"
-                  :items="roleOptions"
-                  label="Role"
-                  prepend-inner-icon="mdi-account-badge-outline"
-                  density="comfortable"
-                  variant="outlined"
-                />
-
-                <v-btn
-                  :prepend-icon="isRegistering ? 'mdi-account-plus' : 'mdi-login'"
-                  block
-                  class="mt-1"
-                  color="primary"
-                  density="comfortable"
-                  :loading="isSubmitting"
-                  size="large"
-                  type="submit"
-                >
-                  {{ primaryActionLabel }}
-                </v-btn>
-              </v-form>
-
-              <v-divider class="my-6"></v-divider>
-
-              <div class="switcher">
-                <span>{{ secondaryHelper }}</span>
-                <v-btn
-                  class="mt-2"
-                  color="primary"
-                  variant="text"
-                  @click="toggleMode"
-                >
-                  {{ secondaryActionLabel }}
-                </v-btn>
-              </div>
-            </v-card-text>
-          </v-card>
-
-          <p class="footer-copy">
-            Need help getting started? Review the onboarding checklist in the
-            documentation for step-by-step guidance.
-          </p>
-        </div>
-      </v-col>
-    </v-row>
+  <v-container class="d-flex justify-center align-center h-100">
+    <v-card width="400" title="Login to Nutriz 🥗">
+      <v-card-text>
+        <v-alert
+          v-if="errorMessage"
+          type="error"
+          class="mb-4"
+          border="start"
+          :text="errorMessage"
+        />
+        <v-text-field
+          v-model="email"
+          label="Email"
+          prepend-inner-icon="mdi-email-outline"
+          autocomplete="username"
+        ></v-text-field>
+        <v-text-field
+          v-model="password"
+          label="Password"
+          type="password"
+          prepend-inner-icon="mdi-lock-outline"
+          autocomplete="current-password"
+        ></v-text-field>
+        <v-btn
+          block
+          color="primary"
+          class="mt-2"
+          :loading="isSubmitting"
+          @click="handleLogin"
+        >
+          Login
+        </v-btn>
+      </v-card-text>
+    </v-card>
   </v-container>
 </template>
 
 <script setup>
-import { computed, ref } from "vue";
+import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/authStore";
 
@@ -145,101 +46,20 @@ const authStore = useAuthStore();
 
 const email = ref("");
 const password = ref("");
-const confirmPassword = ref("");
-const role = ref("nutritionist");
 const errorMessage = ref("");
 const isSubmitting = ref(false);
-const isRegistering = ref(false);
 
-const heroHighlights = computed(() => [
-  {
-    title: "Centralised programs",
-    copy: "Manage clients, foods, and recipes in one secure portal designed for nutrition workflows.",
-  },
-  {
-    title: "Smart nutrition math",
-    copy: "Automatic macro calculations keep every meal balanced as you customise servings.",
-  },
-  {
-    title: "Client-ready visuals",
-    copy: "Share elegant dashboards and summaries that make progress crystal clear.",
-  },
-]);
-
-const roleOptions = computed(() => [
-  { title: "Nutritionist", value: "nutritionist" },
-  { title: "Admin", value: "admin" },
-]);
-
-const headline = computed(() =>
-  isRegistering.value ? "Create your Nutriz account" : "Welcome back"
-);
-
-const helperText = computed(() =>
-  isRegistering.value
-    ? "Set up your workspace to start creating client-ready meal plans."
-    : "Sign in with your credentials to pick up where you left off."
-);
-
-const primaryActionLabel = computed(() =>
-  isRegistering.value ? "Create account" : "Login"
-);
-
-const secondaryActionLabel = computed(() =>
-  isRegistering.value ? "Already have an account? Sign in" : "Need an account? Create one"
-);
-
-const secondaryHelper = computed(() =>
-  isRegistering.value
-    ? "Switch back to sign in if you have credentials already."
-    : "New to Nutriz? Create a secure account in seconds."
-);
-
-function toggleMode() {
-  isRegistering.value = !isRegistering.value;
-  errorMessage.value = "";
-  confirmPassword.value = "";
-  role.value = "nutritionist";
-  isSubmitting.value = false;
-}
-
-async function handleSubmit(event) {
-  event?.preventDefault();
-  if (isSubmitting.value) return;
-
-  if (!email.value || !password.value) {
-    errorMessage.value = "Please provide both email and password.";
-    return;
-  }
-
-  if (isRegistering.value) {
-    if (password.value.length < 6) {
-      errorMessage.value = "Password must be at least 6 characters long.";
-      return;
-    }
-
-    if (password.value !== confirmPassword.value) {
-      errorMessage.value = "Passwords do not match.";
-      return;
-    }
-  }
-
+async function handleLogin() {
+  if (!email.value || !password.value || isSubmitting.value) return;
   isSubmitting.value = true;
   errorMessage.value = "";
   try {
-    const payload = { email: email.value, password: password.value };
-    if (isRegistering.value) {
-      await authStore.register({ ...payload, role: role.value });
-    } else {
-      await authStore.login(payload);
-    }
+    await authStore.login({ email: email.value, password: password.value });
     await authStore.fetchCurrentUser().catch(() => {});
     await router.replace("/clients");
   } catch (error) {
-    const fallbackMessage = isRegistering.value
-      ? "Unable to create account. Please try again."
-      : "Invalid credentials. Please try again.";
-    errorMessage.value = authStore.error || fallbackMessage;
+    errorMessage.value =
+      authStore.error || "Invalid credentials. Please try again.";
   } finally {
     isSubmitting.value = false;
   }

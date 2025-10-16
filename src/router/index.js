@@ -1,7 +1,9 @@
-import { createRouter, createWebHistory } from 'vue-router';
-import DefaultLayout from '../layouts/DefaultLayout.vue';
-import pinia from '@/stores';
-import { useAuthStore } from '@/stores/authStore';
+// src/router/index.js (Original Version)
+
+import { createRouter, createWebHistory } from "vue-router";
+import DefaultLayout from "../layouts/DefaultLayout.vue";
+import pinia from "@/stores";
+import { useAuthStore } from "@/stores/authStore";
 
 const routes = [
   {
@@ -16,39 +18,39 @@ const routes = [
         meta: { requiresAuth: true },
       },
       {
-        path: 'clients',
-        name: 'Clients',
-        component: () => import('../views/ClientsView.vue'),
+        path: "clients",
+        name: "Clients",
+        component: () => import("../views/ClientsView.vue"),
         meta: { requiresAuth: true },
       },
       {
-        path: 'clients/:id',
-        name: 'ClientDetail',
-        component: () => import('../views/ClientDetailView.vue'),
+        path: "clients/:id",
+        name: "ClientDetail",
+        component: () => import("../views/ClientDetailView.vue"),
         meta: { requiresAuth: true },
       },
       {
-        path: 'clients/:id/plan',
-        name: 'PlanSummary',
-        component: () => import('../views/PlanSummaryView.vue'),
+        path: "clients/:id/plan",
+        name: "PlanSummary",
+        component: () => import("../views/PlanSummaryView.vue"),
         meta: { requiresAuth: true },
       },
       {
-        path: 'recipes',
-        name: 'Recipes',
-        component: () => import('../views/RecipesView.vue'),
+        path: "recipes",
+        name: "Recipes",
+        component: () => import("../views/RecipesView.vue"),
         meta: { requiresAuth: true },
       },
       {
-        path: 'foods',
-        name: 'Foods',
-        component: () => import('../views/FoodsView.vue'),
+        path: "foods",
+        name: "Foods",
+        component: () => import("../views/FoodsView.vue"),
         meta: { requiresAuth: true },
       },
       {
-        path: 'meals',
-        name: 'Meals',
-        component: () => import('../views/MealsView.vue'),
+        path: "meals",
+        name: "Meals",
+        component: () => import("../views/MealsView.vue"),
         meta: { requiresAuth: true },
       },
     ],
@@ -72,17 +74,16 @@ router.beforeEach(async (to, from, next) => {
     try {
       await authStore.fetchCurrentUser();
     } catch (error) {
-      // Token invalid or expired, clear session
-      authStore.logout();
+      // Token invalid or expired
     }
   }
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    return next({ name: 'Login', query: { redirect: to.fullPath } });
+    return next({ name: "Login", query: { redirect: to.fullPath } });
   }
 
-  if (to.name === 'Login' && authStore.isAuthenticated) {
-    return next({ path: '/' });
+  if (to.name === "Login" && authStore.isAuthenticated) {
+    return next({ path: "/" });
   }
 
   next();

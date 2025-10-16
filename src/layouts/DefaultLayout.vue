@@ -4,12 +4,10 @@
       <v-app-bar-nav-icon v-if="!isDesktop" @click="drawer = !drawer"></v-app-bar-nav-icon>
       <v-toolbar-title class="font-weight-semibold">Nutriz</v-toolbar-title>
       <v-spacer></v-spacer>
-      <div class="d-flex align-center">
-        <span class="mr-4 text-body-2" v-if="userEmail">{{ userEmail }}</span>
-        <v-btn icon @click="handleLogout">
-          <v-icon>mdi-logout</v-icon>
-        </v-btn>
-      </div>
+      <span class="mr-4" v-if="userEmail">{{ userEmail }}</span>
+      <v-btn icon @click="handleLogout">
+        <v-icon>mdi-logout</v-icon>
+      </v-btn>
     </v-app-bar>
 
     <v-navigation-drawer
@@ -44,29 +42,22 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue';
-import { useDisplay } from 'vuetify';
-import { useRouter } from 'vue-router';
-import { useAuthStore } from '@/stores/authStore';
+import { computed, ref } from "vue";
+import { useDisplay } from "vuetify";
+import { useRouter } from "vue-router";
+import { useAuthStore } from "@/stores/authStore";
 
-const { mdAndUp } = useDisplay();
-const isDesktop = computed(() => mdAndUp.value);
-
-const drawer = ref(isDesktop.value);
-const rail = ref(isDesktop.value);
-
-watch(isDesktop, (value) => {
-  drawer.value = value;
-  rail.value = value;
-});
+const drawer = ref(true);
+const rail = ref(true); // Start as a rail on desktop
+const display = useDisplay();
 
 const authStore = useAuthStore();
 const router = useRouter();
 
-const userEmail = computed(() => authStore.user?.email || '');
+const userEmail = computed(() => authStore.user?.email || "");
 
-function handleLogout() {
+async function handleLogout() {
   authStore.logout();
-  router.replace({ name: 'Login' });
+  await router.replace({ name: "Login" });
 }
 </script>
