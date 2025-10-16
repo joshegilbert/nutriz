@@ -1,13 +1,8 @@
-// src/layouts/DefaultLayout.vue (Original Version)
-
 <template>
   <v-app>
-    <v-app-bar app color="primary" density="compact">
-      <v-app-bar-nav-icon
-        v-if="!display.mdAndUp.value"
-        @click="drawer = !drawer"
-      ></v-app-bar-nav-icon>
-      <v-toolbar-title>Nutriz</v-toolbar-title>
+    <v-app-bar app color="primary" density="comfortable">
+      <v-app-bar-nav-icon v-if="!isDesktop" @click="drawer = !drawer"></v-app-bar-nav-icon>
+      <v-toolbar-title class="font-weight-semibold">Nutriz</v-toolbar-title>
       <v-spacer></v-spacer>
       <span class="mr-4" v-if="userEmail">{{ userEmail }}</span>
       <v-btn icon @click="handleLogout">
@@ -18,7 +13,7 @@
     <v-navigation-drawer
       v-model="drawer"
       :rail="rail"
-      :permanent="display.mdAndUp.value"
+      :permanent="isDesktop"
       expand-on-hover
     >
       <v-list>
@@ -32,34 +27,15 @@
       <v-divider></v-divider>
 
       <v-list density="compact" nav>
-        <v-list-item
-          prepend-icon="mdi-account-group"
-          title="Clients"
-          value="clients"
-          to="/clients"
-        ></v-list-item>
-        <v-list-item
-          prepend-icon="mdi-food-apple"
-          title="Foods"
-          value="foods"
-          to="/foods"
-        ></v-list-item>
-        <v-list-item
-          prepend-icon="mdi-silverware"
-          title="Meals"
-          value="meals"
-          to="/meals"
-        ></v-list-item>
-        <v-list-item
-          prepend-icon="mdi-receipt-text"
-          title="Recipes"
-          value="recipes"
-          to="/recipes"
-        ></v-list-item>
+        <v-list-item prepend-icon="mdi-view-dashboard" title="Dashboard" value="home" to="/" />
+        <v-list-item prepend-icon="mdi-account-group" title="Clients" value="clients" to="/clients" />
+        <v-list-item prepend-icon="mdi-food-apple" title="Foods" value="foods" to="/foods" />
+        <v-list-item prepend-icon="mdi-silverware" title="Meals" value="meals" to="/meals" />
+        <v-list-item prepend-icon="mdi-receipt-text" title="Recipes" value="recipes" to="/recipes" />
       </v-list>
     </v-navigation-drawer>
 
-    <v-main style="min-height: 100vh" class="bg-grey-lighten-4">
+    <v-main class="bg-grey-lighten-4" style="min-height: 100vh">
       <router-view></router-view>
     </v-main>
   </v-app>

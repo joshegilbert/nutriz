@@ -6,15 +6,16 @@ import pinia from "@/stores";
 import { useAuthStore } from "@/stores/authStore";
 
 const routes = [
-  // Routes that use the DefaultLayout
   {
-    path: "/",
+    path: '/',
     component: DefaultLayout,
     meta: { requiresAuth: true },
     children: [
       {
-        path: "",
-        redirect: "/clients",
+        path: '',
+        name: 'Home',
+        component: () => import('../views/HomeView.vue'),
+        meta: { requiresAuth: true },
       },
       {
         path: "clients",
@@ -54,11 +55,10 @@ const routes = [
       },
     ],
   },
-  // Route that does NOT use the DefaultLayout
   {
-    path: "/login",
-    name: "Login",
-    component: () => import("../views/LoginView.vue"),
+    path: '/login',
+    name: 'Login',
+    component: () => import('../views/LoginView.vue'),
   },
 ];
 
