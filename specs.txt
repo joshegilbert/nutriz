@@ -1,0 +1,223 @@
+Nice — this is gold. I turned everything you told me into a clear, actionable product spec you can hand to your dev partner (or use for planning). I also added acceptance criteria, dev notes, UX behaviors, and a short list of a few remaining decisions that will affect implementation.
+
+# Scope
+
+Build a “Meal Plan Builder” inside Nutriz that replaces the Google Sheet workflow for nutritionists. Feature parity with the Sheet + stronger UX: full macro control at any level, advanced bulk operations, a calendar-first planning UX (replacing the existing week/day tabs), printable PDF/exports, shopping list grouping, inline creation/editing of foods/recipes, undo/redo and versioning, and cross-client plan copy. Focus first on the nutritionist experience (client view is a later phase but affects design).
+
+---
+
+# Feature spec (user-story + acceptance criteria + dev notes)
+
+## 1 — Macro Overrides & Calculation
+
+**User stories**
+
+* As a nutritionist, I can rely on macros to auto-calc from a food/recipe, but I can override macros at any level (food item → meal → day → week → whole program).
+* If I override a meal’s macros, the meal’s macro totals become independent of the sub-foods (sub-foods remain editable but do not automatically force the meal back); the meal override should still update the overall day totals upward or downward accordingly.
+* I can reset any overridden item back to auto-calculated state (single-item reset).
+
+**Acceptance criteria**
+
+* Auto-calculated macros populate on add; any field is editable.
+* Overridden fields are subtly visually different (e.g., light underline or faint background color).
+* Reset button visible for overridden element; pressing it returns that element to auto-calculated macros but does **not** change unrelated items.
+* Changing a sub-food after meal override **does not** change meal-level override value; changing a meal-level value updates day and week totals.
+
+**Dev notes**
+
+* Track `macrosSource` on each item: `auto` or `overridden`. Show override flag.
+* When override occurs on meal: set meal.macros to override values and set meal.macrosSource = 'overridden'. Calculations should treat it as authoritative when aggregating up.
+* Provide `resetMacros()` per item to set `macrosSource='auto'` and recalc.
+
+---
+
+## 2 — Calendar-first Scheduling (replaces week/day tabs)
+
+**User stories**
+
+* Nutritionist opens a calendar (month/week/day) similar to Google Calendar and schedules meal items into slots.
+* Calendar supports optional time metadata; order of items matters.
+* Drag-and-drop is supported (drag a recipe/food from library to a day/slot) — with performance caveat for large DB.
+* Calendar view fully replaces the current tabbed week/day experience.
+
+**Acceptance criteria**
+
+* Calendar supports month view (overview), week view (editable), and day view (detailed editing).
+* Drag-and-drop from a searchable side library into a day/time slot.
+* Ordering can be adjusted by dragging within a meal block; times are optional metadata.
+* Calendar changes persist to the client’s program data structure.
+
+**Dev notes**
+
+* Use virtualized list and lazy-loading for library to avoid heavy DOM with large DB.
+* Drag/drop implementation should transfer a lightweight item reference (id + type) and call the same addItem flow used in forms.
+* Calendar is the primary view — remove duplicate week tabs or sync them to the same data model.
+
+---
+
+## 3 — Items, Meals, Recipes & Inline Editing
+
+**User stories**
+
+* Add item from library (food/meal/recipe) into a time slot; if meal or recipe has components, user can expand to edit sub-components inline.
+* Quick-create food/recipe inline without leaving the plan view.
+* Inline edit (click to edit amounts/macros/notes) is supported.
+
+**Acceptance criteria**
+
+* Input fields for amount, notes, time are inline editable.
+* ‘Create new food/recipe’ modal or inline editor opens without leaving current page and saves to DB scope (global or personal depending on setting).
+* Expanding a meal shows sub-components; editing a sub-component recalculates parent unless parent is overridden.
+
+**Dev notes**
+
+* Reuse existing add-item modal as a starting point but add inline forms (contenteditable or small form fields).
+* Allow “save to library” toggle for newly created food/recipe (with owner attribution).
+
+---
+
+## 4 — Bulk Operations & Copying
+
+**User stories**
+
+* Nutritionist can replace a food globally, for a chosen duration (single day, week range, N weeks, or entire client history).
+* Nutritionist can copy/paste days, meals, and items; can copy across clients.
+* Nutritionist can duplicate a week into another week or another client.
+
+**Acceptance criteria**
+
+* Replace dialog accepts scope: current day / week / all weeks / custom date range / all clients (or select clients).
+* Copy/paste offers options: include notes? include overrides? keep IDs replaced? (default: deep copy with new IDs).
+* Cross-client copy asks confirmation and shows preview.
+
+**Dev notes**
+
+* Implement careful transactional updates with undo (see below) because replace operations can be destructive.
+* Provide dry-run preview for big replace (show count of affected items).
+
+---
+
+## 5 — Shopping List & Plan Summary (PDF)
+
+**User stories**
+
+* Generate shopping list for the plan (weekly or custom range), grouped by food category, then alphabetized.
+* Produce a client-facing PDF with day/meal/recipe summary: show day totals, meal totals, and recipes expandable (steps visible) — for recipes, do not list all sub-components unless the item is a standalone food added by the nutritionist.
+
+**Acceptance criteria**
+
+* Shopping list consolidates quantities to a consistent unit if possible; grouped by category (produce, dairy, meat, pantry, etc.) and alphabetized within groups.
+* Export to PDF shows: client name, date range, daily totals, meal blocks, recipe steps (expandable), shopping list separated, branding area.
+* Provide a “shopping-list-only” printable view.
+
+**Dev notes**
+
+* Keep canonical unit for shopping list entries (store `preferredUnit` per food). If multiple units exist, show both or use best-effort conversion only if conversion factors available.
+* Use a server-side or client-side PDF generator (e.g., Puppeteer or jsPDF combined with styled print CSS); ensure print layout is tested.
+
+---
+
+## 6 — DB Scope, Sharing & Attribution
+
+**User stories**
+
+* Foods/meals/recipes can be global or nutritionist-specific. Nutritionist can set view filters: My Library / Team Library / Global Library.
+* When viewing shared items, show attribution: createdBy, createdAt.
+* Favorites/Quick Add list for fast access to frequently used items.
+
+**Acceptance criteria**
+
+* Library filter toggles available and persist per nutritionist.
+* Attribution metadata visible when viewing a shared item.
+* Quick-add panel allows bookmarking items.
+
+**Dev notes**
+
+* Data model: `item.ownerId`, `item.scope` (`private`, `team`, `global`), `item.createdAt`, `item.createdBy`.
+* Permissions: editing/deleting global items restricted to admins or owner.
+* Consider future “social” features: likes/comments — store minimal metadata now for future expansion.
+
+---
+
+## 7 — Undo/Redo & Versioning
+
+**User stories**
+
+* Nutritionist can undo/redo recent changes during the editing session.
+* Nutritionist can save versions of a week (Week 1 v1, Week 1 v2…), and restore earlier versions.
+
+**Acceptance criteria**
+
+* Undo/redo stack for the session (limit configurable, e.g., 50 steps).
+* Version list accessible per week; restore replaces current week and creates a new version snapshot.
+
+**Dev notes**
+
+* Implement a command/operation stack for undo/redo in frontend (Pinia store + history plugin); persist important snapshots in backend for version restore if server exists.
+* Version entries: `{id, timestamp, summary, snapshot}`.
+
+---
+
+## 8 — UX/Visuals & Indicators
+
+* Subtle override indicator (faint background or small dot with tooltip “manually edited”).
+* Clear “draft / published” state for plans sent to clients.
+* Clipboard indicator showing what type is copied (day, meal, item) and options when pasting.
+* Confirmation dialogs for destructive bulk ops and replace-across-clients.
+
+---
+
+## 9 — Client View (future) & Notifications
+
+* Client view will be interactive: check-off items, view recipes, expand steps, and have grocery-only view.
+* Nutritionist can keep plan as Draft, then Publish → client notified (in-app/email).
+* Nutritionist can push live updates or batch publish.
+
+**Dev notes**
+
+* Keep publication metadata: `plan.publishedAt`, `plan.publishedBy`, `plan.isDraft`.
+* Notification system can start simple (email + in-app badge) then improve later.
+
+---
+
+# Data model (core fields)
+
+* Food: `{ id, ownerId, scope, brand, name, servingSize, servingUnit, preferredUnit, macrosPerServing, category, createdAt }`
+* Meal/Recipe: `{ id, ownerId, scope, name, components: [{type:'food', foodId, amount}], instructions?, createdAt }`
+* Plan Item: `{ id, type('food'|'meal'|'recipe'), sourceId, amount, time?, mealTime, notes, macros: {cals,protein,carbs,fat}, macrosSource:'auto'|'overridden', expanded }`
+* Client program: `program: [{ weekNumber, waterTargetMl, days: { monday: [PlanItem], ... } }]`
+* Version snapshot: `{ id, clientId, weekNumber, createdAt, createdBy, snapshotData }`
+
+---
+
+# Edge cases & important constraints
+
+* **Large DB performance**: when library grows big, searches & drag/drop must be performant—use server-side search or client-side virtual scrolling.
+* **Unit conversions**: shopping list consolidation needs conversion logic; if not precise, show unit as-is and flag items needing manual aggregation.
+* **Concurrent edits**: if multiple nutritionists can edit the same client, add optimistic locking or last-write-wins with change history.
+* **Overrides + copies**: copying a day should have a choice: copy with overrides preserved or copy with macros reset to auto-calc.
+
+---
+
+# Minimal MVP roadmap (suggested)
+
+1. Calendar view (month/week/day) + add item modal and inline editing.
+2. Macro auto-calc + manual override + subtle visual indicator + reset per item.
+3. Copy/paste day/meal/item and copy across clients.
+4. Weekly shopping list grouped by category + printable Plan Summary PDF.
+5. Quick create food/recipe inline + favorites.
+6. Undo/redo stack + week version snapshots.
+7. Bulk replace with scoped duration + preview.
+8. Publish/draft flag + simple notification.
+
+---
+
+# Remaining decisions (quick list)
+
+I tried to resolve most things from your answers — only a few decisions remain that will materially affect implementation:
+
+1. **Units & conversions**: Should the app attempt automatic conversions for shopping list (e.g., cups ↔ grams)? If yes, what unit system to prefer (metric vs. imperial) — per-nutritionist preference?
+2. **Roles & permissions**: Do multiple nutritionists exist within one “team” and do you want role-based permissions (admin vs editor)?
+3. **Persistence / backend**: Do you already have a backend planned (DB type) for persisting large libraries and versions? (Important for implementing global vs local DB and cross-client copies.)
+4. **PDF branding**: Any required logo/brand/format for the exported PDF (header/footer)?
+5. **Drag & drop scale**: For large libraries, do you prefer to implement drag/drop only within a loaded week/day view and allow “add via search” for the library, to reduce complexity?
