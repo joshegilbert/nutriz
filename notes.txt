@@ -4,3 +4,11 @@ starting a server for backend:
 
 starting a server for frontend: 
     npm run dev
+
+For github actions:
+
+git add .
+
+git commit -m "commit message"
+
+git push
