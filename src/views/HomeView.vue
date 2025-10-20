@@ -197,6 +197,7 @@ onMounted(async () => {
     await Promise.all([
       dataStore.fetchClients(),
       dataStore.fetchFoods(),
+      dataStore.fetchMeals(),
       dataStore.fetchRecipes(),
     ]);
   } catch (error) {
