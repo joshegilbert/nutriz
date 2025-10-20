@@ -380,6 +380,17 @@ const emailSubject = ref("");
 const emailBody = ref("");
 
 onMounted(async () => {
+  try {
+    const loaders = [];
+    if (!foods.value.length) loaders.push(dataStore.fetchFoods().catch(() => {}));
+    if (!meals.value.length) loaders.push(dataStore.fetchMeals().catch(() => {}));
+    if (!recipes.value.length) loaders.push(dataStore.fetchRecipes().catch(() => {}));
+    if (loaders.length) {
+      await Promise.all(loaders);
+    }
+  } catch (error) {
+    // Errors are handled by the shared store state
+  }
   program.value = await dataStore.getProgramByClientId(clientId.value);
   isLoading.value = false;
   // Prefill email fields once client/program available

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import api, { setAuthToken } from '@/services/api';
+import { useDataStore } from './useDataStore';
 
 const TOKEN_KEY = 'nutriz_token';
 
@@ -17,6 +18,14 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => Boolean(token.value));
 
   const setSession = (payload) => {
+    const previousUserId = user.value?.id ? String(user.value.id) : null;
+    const nextUserId = payload?._id ? String(payload._id) : null;
+
+    if (!payload || previousUserId !== nextUserId) {
+      const dataStore = useDataStore();
+      dataStore.resetAll();
+    }
+
     token.value = payload?.token || '';
     user.value = payload
       ? {

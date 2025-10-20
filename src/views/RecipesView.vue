@@ -197,10 +197,19 @@ const formTitle = computed(() =>
 const rules = { required: (value) => !!value || "Required." };
 
 onMounted(async () => {
-  if (!foods.value.length) {
-    await dataStore.fetchFoods().catch(() => {});
+  try {
+    const loaders = [];
+    if (!foods.value.length) {
+      loaders.push(dataStore.fetchFoods().catch(() => {}));
+    }
+    if (!meals.value.length) {
+      loaders.push(dataStore.fetchMeals().catch(() => {}));
+    }
+    loaders.push(dataStore.fetchRecipes().catch(() => {}));
+    await Promise.all(loaders);
+  } catch (error) {
+    // Errors surface through lastError already
   }
-  await dataStore.fetchRecipes().catch(() => {});
 });
 
 // --- HELPER FUNCTIONS ---
