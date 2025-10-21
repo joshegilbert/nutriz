@@ -26,6 +26,7 @@
     />
 
     <v-card>
+      <v-progress-linear v-if="dataStore.loading.foods" indeterminate color="primary"></v-progress-linear>
       <v-card-text>
         <v-data-table
           :headers="headers"
@@ -47,8 +48,8 @@
       </v-card-text>
     </v-card>
 
-    <v-dialog v-model="dialog" max-width="800px">
-     <v-card>
+    <v-dialog v-model="dialog" max-width="600px">
+      <v-card>
         <v-card-title>
           <span class="text-h5">{{ formTitle }}</span>
         </v-card-title>
@@ -163,6 +164,7 @@ const dataStore = useDataStore();
 const { foods, isLoadingFoods, lastError } = storeToRefs(dataStore);
 
 const dialog = ref(false);
+const dialogDelete = ref(false);
 const form = ref(null);
 const editedItem = ref(null);
 

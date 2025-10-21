@@ -26,6 +26,7 @@
     />
 
     <v-card>
+      <v-progress-linear v-if="dataStore.loading.clients" indeterminate color="primary"></v-progress-linear>
       <v-card-text>
         <v-data-table
           :headers="headers"
@@ -44,10 +45,8 @@
             </router-link>
           </template>
 
-          <template v-slot:item.status="{ item }">
-            <v-chip :color="item.status === 'Active' ? 'green' : 'orange'" dark>
-              {{ item.status }}
-            </v-chip>
+          <template v-slot:item.goals="{ item }">
+            <span>{{ (item.goals || []).join(", ") }}</span>
           </template>
 
           <template v-slot:item.dob="{ item }">
@@ -68,7 +67,7 @@
       </v-card-text>
     </v-card>
 
-    <v-dialog v-model="dialog" max-width="500px">
+    <v-dialog v-model="dialog" max-width="600px">
       <v-card>
         <v-card-title>
           <span class="text-h5">{{ formTitle }}</span>
@@ -86,9 +85,8 @@
                 </v-col>
                 <v-col cols="12" sm="6">
                   <v-text-field
-                    v-model="editedItem.email"
-                    label="Email*"
-                    :rules="[rules.required, rules.email]"
+                    v-model="editedItem.goals"
+                    label="Goals (comma separated)"
                   ></v-text-field>
                 </v-col>
                 <v-col cols="12" sm="6">
@@ -148,6 +146,7 @@
           <v-btn
             color="blue-darken-1"
             variant="text"
+            :loading="saving"
             @click="deleteClientConfirm"
             :loading="isLoadingClients"
           >
@@ -190,7 +189,6 @@ const formTitle = computed(() =>
 
 const rules = {
   required: (value) => !!value || "Required.",
-  email: (value) => /.+@.+\..+/.test(value) || "Invalid e-mail.",
 };
 
 const headers = ref([

@@ -11,7 +11,7 @@
     </div>
 
     <div v-else>
-      <v-row>
+      <v-row class="mb-4">
         <v-col cols="12">
           <div class="d-flex align-center mb-4 flex-wrap gap-3 no-print">
             <v-btn
@@ -355,7 +355,6 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
-import { useDataStore } from "@/stores/useDataStore";
 import { storeToRefs } from "pinia";
 import { format, parseISO } from "date-fns";
 

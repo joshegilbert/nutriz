@@ -1,5 +1,3 @@
-// src/router/index.js (Original Version)
-
 import { createRouter, createWebHistory } from "vue-router";
 import DefaultLayout from "../layouts/DefaultLayout.vue";
 import pinia from "@/stores";
@@ -30,7 +28,7 @@ const routes = [
         meta: { requiresAuth: true },
       },
       {
-        path: "clients/:id/plan",
+        path: "clients/:clientId/plan",
         name: "PlanSummary",
         component: () => import("../views/PlanSummaryView.vue"),
         meta: { requiresAuth: true },
@@ -49,7 +47,7 @@ const routes = [
       },
       {
         path: "meals",
-        name: "Meals",
+        name: "Programs",
         component: () => import("../views/MealsView.vue"),
         meta: { requiresAuth: true },
       },

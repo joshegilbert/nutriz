@@ -2,7 +2,7 @@
   <v-container>
     <v-row align="center" class="mb-4">
       <v-col>
-        <h1 class="text-h4">Meals Database</h1>
+        <h1 class="text-h4">Meal Programs</h1>
       </v-col>
       <v-col class="text-right">
         <v-btn
@@ -26,6 +26,7 @@
     />
 
     <v-card>
+      <v-progress-linear v-if="dataStore.loading.programs" indeterminate color="primary"></v-progress-linear>
       <v-card-text>
         <v-data-table
           :headers="headers"
@@ -35,27 +36,27 @@
           loading-text="Loading meals..."
         >
           <template v-slot:item.macros="{ item }">
-            Cal: {{ item.totalMacros.calories.toFixed(0) }} / Prot: {{ item.totalMacros.protein.toFixed(0) }}g / Carb: {{ item.totalMacros.carbs.toFixed(0) }}g / Fat: {{ item.totalMacros.fat.toFixed(0) }}g
+            Cal: {{ item.totalMacros.calories.toFixed(0) }} /
+            Prot: {{ item.totalMacros.protein.toFixed(0) }}g /
+            Carb: {{ item.totalMacros.carbs.toFixed(0) }}g /
+            Fat: {{ item.totalMacros.fat.toFixed(0) }}g
           </template>
           <template v-slot:item.actions="{ item }">
-            <v-icon small class="mr-2" @click="editMeal(item)">mdi-pencil</v-icon>
-            <v-icon small @click="deleteMeal(item)">mdi-delete</v-icon>
+            <v-btn icon variant="text" :to="{ name: 'PlanSummary', params: { clientId: item.clientId }, query: { programId: item.id } }">
+              <v-icon>mdi-eye</v-icon>
+            </v-btn>
+            <v-btn icon variant="text" color="grey" @click="deleteProgram(item)">
+              <v-icon>mdi-delete</v-icon>
+            </v-btn>
           </template>
         </v-data-table>
       </v-card-text>
     </v-card>
 
-    <v-dialog v-model="dialog" max-width="900px">
+    <v-dialog v-model="dialog" max-width="600px">
       <v-card>
-        <v-card-title class="d-flex justify-space-between align-center">
-          <span class="text-h5">{{ formTitle }}</span>
-          <div class="text-subtitle-2">
-            Totals:
-            <span class="ml-2">Cal: <b>{{ mealTotalMacros.calories.toFixed(0) }}</b></span>
-            <span class="ml-3">Prot: <b>{{ mealTotalMacros.protein.toFixed(0) }}g</b></span>
-            <span class="ml-3">Carb: <b>{{ mealTotalMacros.carbs.toFixed(0) }}g</b></span>
-            <span class="ml-3">Fat: <b>{{ mealTotalMacros.fat.toFixed(0) }}g</b></span>
-          </div>
+        <v-card-title>
+          <span class="text-h5">Create Program</span>
         </v-card-title>
         <v-card-text>
           <v-form ref="form">
@@ -197,6 +198,7 @@
 import { ref, computed, onMounted } from "vue";
 import { useDataStore } from "@/stores/useDataStore";
 import { storeToRefs } from "pinia";
+import { useDataStore } from "@/stores/useDataStore";
 
 const dataStore = useDataStore();
 const { meals, foods, isLoadingMeals, lastError } = storeToRefs(dataStore);
@@ -329,8 +331,11 @@ const mealTotalMacros = computed(() => {
 });
 
 const headers = ref([
-  { title: "Meal Name", key: "name", align: "start" },
-  { title: "Macros (1 Serving)", key: "macros", sortable: false },
+  { title: "Program", key: "name", align: "start" },
+  { title: "Client", key: "clientName" },
+  { title: "Start", key: "startDate" },
+  { title: "Length", key: "length" },
+  { title: "Macros", key: "macros", sortable: false },
   { title: "Actions", key: "actions", sortable: false },
 ]);
 
@@ -341,9 +346,9 @@ function addComponent(type) {
   editedItem.value.components.push(createComponent(type));
 }
 
-function removeComponent(index) {
-  editedItem.value.components.splice(index, 1);
-}
+const rules = {
+  required: (value) => !!value || "Required.",
+};
 
 function getServing(component) {
   if (!component || component.type === "custom") return component?.serving || "unit";

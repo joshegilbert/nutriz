@@ -5,7 +5,10 @@ const {
     getRecipes,
     getRecipeById,
     updateRecipe,
-    deleteRecipe
+    deleteRecipe,
+    addRecipeIngredient,
+    updateRecipeIngredient,
+    deleteRecipeIngredient
 } = require('../controllers/recipeController');
 const { protect, authorizeRoles } = require('../middleware/authMiddleware');
 
@@ -19,5 +22,12 @@ router.route('/:id')
     .get(protect, authorizeRoles('nutritionist', 'admin'), getRecipeById)
     .put(protect, authorizeRoles('nutritionist', 'admin'), updateRecipe)
     .delete(protect, authorizeRoles('nutritionist', 'admin'), deleteRecipe);
+
+router.route('/:id/ingredients')
+    .post(protect, authorizeRoles('nutritionist', 'admin'), addRecipeIngredient);
+
+router.route('/:id/ingredients/:ingredientId')
+    .patch(protect, authorizeRoles('nutritionist', 'admin'), updateRecipeIngredient)
+    .delete(protect, authorizeRoles('nutritionist', 'admin'), deleteRecipeIngredient);
 
 module.exports = router;

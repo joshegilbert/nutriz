@@ -48,7 +48,7 @@ import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/authStore";
 
 const drawer = ref(true);
-const rail = ref(true); // Start as a rail on desktop
+const rail = ref(true);
 const display = useDisplay();
 
 const authStore = useAuthStore();

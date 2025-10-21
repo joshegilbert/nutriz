@@ -25,6 +25,7 @@
     />
 
     <v-card>
+      <v-progress-linear v-if="dataStore.loading.recipes" indeterminate color="primary"></v-progress-linear>
       <v-card-text>
         <v-data-table
           :headers="headers"
@@ -34,7 +35,10 @@
           loading-text="Loading recipes..."
         >
           <template v-slot:item.macros="{ item }">
-            Cal: {{ item.totalMacros.calories.toFixed(0) }} / Prot: {{ item.totalMacros.protein.toFixed(0) }}g / Carb: {{ item.totalMacros.carbs.toFixed(0) }}g / Fat: {{ item.totalMacros.fat.toFixed(0) }}g
+            Cal: {{ item.totalMacros.calories.toFixed(0) }} /
+            Prot: {{ item.totalMacros.protein.toFixed(0) }}g /
+            Carb: {{ item.totalMacros.carbs.toFixed(0) }}g /
+            Fat: {{ item.totalMacros.fat.toFixed(0) }}g
           </template>
           <template v-slot:item.actions="{ item }">
             <v-icon small class="mr-2" @click="editRecipe(item)">mdi-pencil</v-icon>
@@ -44,7 +48,7 @@
       </v-card-text>
     </v-card>
 
-    <v-dialog v-model="dialog" max-width="1000px">
+    <v-dialog v-model="dialog" max-width="900px">
       <v-card>
         <v-card-title class="d-flex justify-space-between align-center">
           <span class="text-h5">{{ formTitle }}</span>
@@ -59,98 +63,53 @@
         <v-card-text style="max-height: 70vh; overflow-y: auto;">
           <v-form ref="form">
             <v-text-field v-model="editedItem.name" label="Recipe Name*" :rules="[rules.required]" class="mb-4"></v-text-field>
-            <v-textarea v-model="editedItem.instructions" label="Instructions" auto-grow rows="4" class="mb-4" hint="Describe the cooking process step-by-step."></v-textarea>
-            
-            <h3 class="text-h6 mb-2">Components</h3>
-            
-            <div v-for="(component, index) in editedItem.components" :key="index">
-              <v-card v-if="component.type === 'meal'" class="mb-3" variant="outlined" style="background-color: #fafafa;">
-                 <v-card-item>
-                   <div class="d-flex align-center">
-                      <v-icon class="mr-2">mdi-folder-outline</v-icon>
-                      <v-autocomplete
-                        :model-value="component.mealId"
-                        @update:model-value="updateMealComponent(index, $event)"
-                        :items="meals"
-                        item-title="name"
+            <v-textarea v-model="editedItem.description" label="Description" auto-grow rows="2" class="mb-4"></v-textarea>
+            <v-textarea v-model="editedItem.instructions" label="Instructions" auto-grow rows="4" class="mb-4"></v-textarea>
+
+            <h3 class="text-h6 mb-2">Ingredients</h3>
+
+            <div v-for="(ingredient, index) in editedItem.ingredients" :key="ingredient.id || index">
+              <v-card class="mb-3" variant="outlined">
+                <v-card-text>
+                  <v-row dense align="center">
+                    <v-col cols="12" md="5">
+                      <v-select
+                        v-model="ingredient.foodItem"
+                        :items="foodOptions"
+                        item-title="label"
                         item-value="id"
-                        label="Select Meal"
+                        label="Food"
                         density="compact"
                         hide-details
-                        variant="underlined"
-                      ></v-autocomplete>
-                      <v-spacer></v-spacer>
-                      <v-btn :icon="component.expanded ? 'mdi-chevron-up' : 'mdi-chevron-down'" variant="text" @click="component.expanded = !component.expanded" title="Edit Contents"></v-btn>
-                      <v-btn icon="mdi-delete" variant="text" color="grey" @click="removeComponent(index)"></v-btn>
-                   </div>
-                 </v-card-item>
-                 <v-expand-transition>
-                   <div v-if="component.expanded">
-                     <v-divider></v-divider>
-                     <div v-for="(foodComp, foodIndex) in component.components" :key="foodIndex" class="pa-3">
-                        <v-card variant="outlined">
-                          <v-card-text>
-                            <v-row dense align="center">
-                              <v-col cols="12" sm="6">{{ getFoodName(foodComp.foodId) }}</v-col>
-                              <v-col cols="4" sm="2"><v-text-field v-model.number="foodComp.amount" label="Amount" density="compact" hide-details type="number" @update:model-value="recalculateMacros(foodComp, true)"></v-text-field></v-col>
-                              <v-col cols="4" sm="2"><v-text-field :model-value="getFoodServing(foodComp.foodId)" label="Serving" density="compact" hide-details readonly variant="underlined"></v-text-field></v-col>
-                              <v-col cols="4" sm="2" class="text-right"><v-btn :icon="foodComp.expanded ? 'mdi-chevron-up' : 'mdi-chevron-down'" variant="text" @click="foodComp.expanded = !foodComp.expanded" title="Override Macros"></v-btn></v-col>
-                            </v-row>
-                            <v-expand-transition>
-                               <div v-if="foodComp.expanded">
-                                  <v-divider class="my-3"></v-divider>
-                                  <p class="text-caption">Override Macros</p>
-                                  <v-row dense>
-                                    <v-col><v-text-field v-model.number="foodComp.macros.calories" label="Calories" density="compact" type="number"></v-text-field></v-col>
-                                    <v-col><v-text-field v-model.number="foodComp.macros.protein" label="Protein" density="compact" type="number" suffix="g"></v-text-field></v-col>
-                                    <v-col><v-text-field v-model.number="foodComp.macros.carbs" label="Carbs" density="compact" type="number" suffix="g"></v-text-field></v-col>
-                                    <v-col><v-text-field v-model.number="foodComp.macros.fat" label="Fat" density="compact" type="number" suffix="g"></v-text-field></v-col>
-                                  </v-row>
-                               </div>
-                            </v-expand-transition>
-                          </v-card-text>
-                        </v-card>
-                     </div>
-                   </div>
-                 </v-expand-transition>
-              </v-card>
-
-              <v-card v-else class="mb-3" variant="outlined">
-                <v-card-text>
-                    <v-row dense align="center">
-                      <v-col cols="12" sm="6">
-                          <v-autocomplete v-if="component.type === 'food'" :model-value="component.foodId" @update:model-value="updateFoodComponent(index, $event)" :items="foods" :item-title="item => `${item.brand} ${item.name}`" item-value="id" label="Select Food" density="compact" hide-details></v-autocomplete>
-                          <v-text-field v-if="component.type === 'custom'" v-model="component.customName" label="Custom Item Name" density="compact" hide-details></v-text-field>
-                      </v-col>
-                      <v-col cols="4" sm="2"><v-text-field v-model.number="component.amount" label="Amount" density="compact" type="number" hide-details @update:model-value="recalculateMacros(component, true)"></v-text-field></v-col>
-                      <v-col cols="4" sm="2">
-                          <v-text-field v-if="component.type === 'custom'" v-model="component.serving" label="Serving" placeholder="e.g. cup" density="compact" hide-details></v-text-field>
-                          <v-text-field v-else :model-value="getFoodServing(component.foodId)" label="Serving" readonly variant="underlined" density="compact" hide-details></v-text-field>
-                      </v-col>
-                      <v-col cols="4" sm="2" class="text-right">
-                        <v-btn :icon="component.expanded ? 'mdi-chevron-up' : 'mdi-chevron-down'" variant="text" @click="component.expanded = !component.expanded" title="Override Macros"></v-btn>
-                        <v-btn icon="mdi-delete" variant="text" color="grey" @click="removeComponent(index)"></v-btn>
-                      </v-col>
-                    </v-row>
-                    <v-expand-transition>
-                      <div v-if="component.expanded">
-                        <v-divider class="my-3"></v-divider>
-                        <p class="text-caption">Override Macros for this Component</p>
-                        <v-row dense>
-                          <v-col><v-text-field v-model.number="component.macros.calories" label="Calories" density="compact" type="number"></v-text-field></v-col>
-                          <v-col><v-text-field v-model.number="component.macros.protein" label="Protein" density="compact" type="number" suffix="g"></v-text-field></v-col>
-                          <v-col><v-text-field v-model.number="component.macros.carbs" label="Carbs" density="compact" type="number" suffix="g"></v-text-field></v-col>
-                          <v-col><v-text-field v-model.number="component.macros.fat" label="Fat" density="compact" type="number" suffix="g"></v-text-field></v-col>
-                        </v-row>
-                      </div>
-                    </v-expand-transition>
+                      ></v-select>
+                    </v-col>
+                    <v-col cols="6" md="3">
+                      <v-text-field
+                        v-model="ingredient.amount"
+                        label="Amount"
+                        placeholder="e.g. 1 cup"
+                        density="compact"
+                      ></v-text-field>
+                    </v-col>
+                    <v-col cols="6" md="2">
+                      <v-text-field
+                        v-model.number="ingredient.quantity"
+                        label="Servings"
+                        type="number"
+                        min="0"
+                        density="compact"
+                      ></v-text-field>
+                    </v-col>
+                    <v-col cols="12" md="2" class="text-right">
+                      <v-btn icon="mdi-delete" variant="text" color="grey" @click="removeIngredient(index)"></v-btn>
+                    </v-col>
+                  </v-row>
+                  <v-textarea v-model="ingredient.notes" label="Notes" rows="2" auto-grow density="compact"></v-textarea>
                 </v-card-text>
               </v-card>
             </div>
 
-            <v-btn @click="addComponent('food')" prepend-icon="mdi-plus" class="mr-2">Add Food</v-btn>
-            <v-btn @click="addComponent('meal')" prepend-icon="mdi-plus" class="mr-2">Add Meal</v-btn>
-            <v-btn @click="addComponent('custom')" prepend-icon="mdi-plus">Add Custom Item</v-btn>
+            <v-btn @click="addIngredient" prepend-icon="mdi-plus">Add Ingredient</v-btn>
           </v-form>
         </v-card-text>
         <v-card-actions>
@@ -296,8 +255,9 @@ const recipesWithMacros = computed(() => {
 });
 
 const headers = ref([
-  { title: "Recipe Name", key: "name", align: "start" },
-  { title: "Macros (1 Serving)", key: "macros", sortable: false },
+  { title: "Recipe", key: "name", align: "start" },
+  { title: "Description", key: "description" },
+  { title: "Macros (per Recipe)", key: "macros", sortable: false },
   { title: "Actions", key: "actions", sortable: false },
 ]);
 
@@ -329,9 +289,20 @@ function updateFoodComponent(index, foodId) {
     recalculateMacros(component, true);
 }
 
-function recalculateMacros(component, force = false) {
-    if (component.expanded && !force) return;
-    component.macros = getMacros(component, true);
+function sumRecipeMacros(ingredients) {
+  return ingredients.reduce(
+    (totals, ingredient) => {
+      const food = foods.value.find((f) => f.id === ingredient.foodItem);
+      if (!food) return totals;
+      const quantity = Number(ingredient.quantity) || 0;
+      totals.calories += (food.caloriesPerServing || 0) * quantity;
+      totals.protein += (food.proteinPerServing || 0) * quantity;
+      totals.carbs += (food.carbsPerServing || 0) * quantity;
+      totals.fat += (food.fatPerServing || 0) * quantity;
+      return totals;
+    },
+    { calories: 0, protein: 0, carbs: 0, fat: 0 }
+  );
 }
 
 function updateMealComponent(componentIndex, mealId) {
@@ -360,7 +331,6 @@ function getFoodServing(foodId) {
   return foods.value.find(f => f.id === foodId)?.defaultServingSize || '';
 }
 
-// --- DIALOG AND SAVE LOGIC ---
 function openAddDialog() {
   editedItem.value = JSON.parse(JSON.stringify(defaultItem));
   dialog.value = true;

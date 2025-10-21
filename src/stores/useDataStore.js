@@ -1189,8 +1189,8 @@ export const useDataStore = defineStore("data", () => {
   //  RETURN API
   // ---------------------------------------------------------------------------
   return {
+    clients,
     foods,
-    meals,
     recipes,
     clients,
     isLoadingClients,
