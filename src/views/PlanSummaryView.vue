@@ -11,7 +11,7 @@
     </div>
 
     <div v-else>
-      <v-row>
+      <v-row class="mb-4">
         <v-col cols="12">
           <div class="d-flex align-center mb-4 flex-wrap gap-3 no-print">
             <v-btn
@@ -355,7 +355,6 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
-import { useDataStore } from "@/stores/useDataStore";
 import { storeToRefs } from "pinia";
 import { format, parseISO } from "date-fns";
 
@@ -363,9 +362,10 @@ const route = useRoute();
 const dataStore = useDataStore();
 const { clients, foods, meals, recipes } = storeToRefs(dataStore);
 
-const clientId = computed(() => Number(route.params.id));
+const clientId = computed(() => route.params.id);
 const client = computed(
-  () => clients.value.find((entry) => entry.id === clientId.value) || null
+  () =>
+    clients.value.find((entry) => String(entry.id) === clientId.value) || null
 );
 
 const program = ref(null);
@@ -379,6 +379,17 @@ const emailSubject = ref("");
 const emailBody = ref("");
 
 onMounted(async () => {
+  try {
+    const loaders = [];
+    if (!foods.value.length) loaders.push(dataStore.fetchFoods().catch(() => {}));
+    if (!meals.value.length) loaders.push(dataStore.fetchMeals().catch(() => {}));
+    if (!recipes.value.length) loaders.push(dataStore.fetchRecipes().catch(() => {}));
+    if (loaders.length) {
+      await Promise.all(loaders);
+    }
+  } catch (error) {
+    // Errors are handled by the shared store state
+  }
   program.value = await dataStore.getProgramByClientId(clientId.value);
   isLoading.value = false;
   // Prefill email fields once client/program available
