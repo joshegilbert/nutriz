@@ -1,16 +1,19 @@
 import { createRouter, createWebHistory } from "vue-router";
 import DefaultLayout from "../layouts/DefaultLayout.vue";
-import { useAuthStore } from "@/stores/useAuthStore";
+import pinia from "@/stores";
+import { useAuthStore } from "@/stores/authStore";
 
 const routes = [
   {
-    path: "/",
+    path: '/',
     component: DefaultLayout,
     meta: { requiresAuth: true },
     children: [
       {
-        path: "",
-        redirect: "/clients",
+        path: '',
+        name: 'Home',
+        component: () => import('../views/HomeView.vue'),
+        meta: { requiresAuth: true },
       },
       {
         path: "clients",
@@ -51,9 +54,9 @@ const routes = [
     ],
   },
   {
-    path: "/login",
-    name: "Login",
-    component: () => import("../views/LoginView.vue"),
+    path: '/login',
+    name: 'Login',
+    component: () => import('../views/LoginView.vue'),
   },
 ];
 
@@ -62,16 +65,23 @@ const router = createRouter({
   routes,
 });
 
-router.beforeEach((to, from, next) => {
-  const authStore = useAuthStore();
+router.beforeEach(async (to, from, next) => {
+  const authStore = useAuthStore(pinia);
+
+  if (authStore.token && !authStore.user) {
+    try {
+      await authStore.fetchCurrentUser();
+    } catch (error) {
+      // Token invalid or expired
+    }
+  }
+
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    next({ name: "Login", query: { redirect: to.fullPath } });
-    return;
+    return next({ name: "Login", query: { redirect: to.fullPath } });
   }
 
   if (to.name === "Login" && authStore.isAuthenticated) {
-    next({ name: "Clients" });
-    return;
+    return next({ path: "/" });
   }
 
   next();

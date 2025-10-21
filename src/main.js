@@ -1,19 +1,16 @@
-import { createApp } from 'vue'
-import App from './App.vue'
-import router from './router'
-import { createPinia } from 'pinia'
+import { createApp } from 'vue';
+import App from './App.vue';
+import router from './router';
+import pinia from './stores';
 
 // Vuetify
-import 'vuetify/styles'
-import { createVuetify } from 'vuetify'
-import * as components from 'vuetify/components'
-import * as directives from 'vuetify/directives'
-import '@mdi/font/css/materialdesignicons.css'
-import { useAuthStore } from '@/stores/useAuthStore'
-import { installInterceptors } from '@/services/httpClient'
+import 'vuetify/styles';
+import { createVuetify } from 'vuetify';
+import * as components from 'vuetify/components';
+import * as directives from 'vuetify/directives';
+import '@mdi/font/css/materialdesignicons.css';
 
-const app = createApp(App)
-const pinia = createPinia()
+const app = createApp(App);
 
 const vuetify = createVuetify({
   components,
@@ -21,17 +18,10 @@ const vuetify = createVuetify({
   icons: {
     defaultSet: 'mdi',
   },
-})
+});
 
-app.use(pinia)
+app.use(pinia);
+app.use(router);
+app.use(vuetify);
 
-const authStore = useAuthStore(pinia)
-installInterceptors(authStore, router)
-if (authStore.token) {
-  authStore.fetchProfile().catch(() => {})
-}
-
-app.use(router)
-app.use(vuetify)
-
-app.mount('#app')
+app.mount('#app');

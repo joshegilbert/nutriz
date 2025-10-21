@@ -1,110 +1,94 @@
 const mongoose = require('mongoose');
 
-const MacroSchema = new mongoose.Schema({
+const MacroSchema = new mongoose.Schema(
+  {
     calories: { type: Number, default: 0 },
     protein: { type: Number, default: 0 },
     carbs: { type: Number, default: 0 },
-    fat: { type: Number, default: 0 }
-}, { _id: false });
+    fat: { type: Number, default: 0 },
+  },
+  { _id: false }
+);
 
-const MealComponentSchema = new mongoose.Schema({
-    sourceType: {
-        type: String,
-        enum: ['food', 'recipe'],
-        default: 'food'
+const ProgramItemSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true },
+    type: {
+      type: String,
+      enum: ['food', 'meal', 'recipe', 'custom'],
+      default: 'custom',
     },
-    sourceId: {
-        type: mongoose.Schema.ObjectId
-    },
-    amount: {
-        type: Number,
-        default: 1,
-        min: [0, 'Amount must be positive']
-    }
-}, { _id: false });
-
-const MealItemSchema = new mongoose.Schema({
-    name: String,
-    sourceType: {
-        type: String,
-        enum: ['food', 'recipe', 'meal', 'custom'],
-        required: true,
-        default: 'food'
-    },
-    sourceId: mongoose.Schema.ObjectId,
-    amount: {
-        type: Number,
-        default: 1,
-        min: [0, 'Amount must be positive']
-    },
-    notes: String,
+    sourceId: { type: String, default: null },
+    name: { type: String, default: '' },
+    amount: { type: Number, default: 1 },
+    unit: { type: String, default: '' },
+    notes: { type: String, default: '' },
+    time: { type: String, default: '' },
     macros: { type: MacroSchema, default: () => ({}) },
     macrosSource: {
-        type: String,
-        enum: ['auto', 'overridden'],
-        default: 'auto'
+      type: String,
+      enum: ['auto', 'overridden'],
+      default: 'auto',
     },
-    components: { type: [MealComponentSchema], default: [] }
-}, { timestamps: true });
+  },
+  { _id: false }
+);
 
-const MealSchema = new mongoose.Schema({
-    mealTime: {
-        type: String,
-        required: true
-    },
-    items: { type: [MealItemSchema], default: [] },
+const ProgramMealSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true },
+    name: { type: String, default: '' },
+    mealTime: { type: String, default: '' },
+    time: { type: String, default: '' },
+    items: { type: [ProgramItemSchema], default: () => [] },
     macros: { type: MacroSchema, default: () => ({}) },
     macrosSource: {
-        type: String,
-        enum: ['auto', 'overridden'],
-        default: 'auto'
-    }
-}, { timestamps: true });
-
-const ProgramDaySchema = new mongoose.Schema({
-    date: {
-        type: String,
-        required: true
+      type: String,
+      enum: ['auto', 'overridden'],
+      default: 'auto',
     },
-    meals: { type: [MealSchema], default: [] },
+  },
+  { _id: false }
+);
+
+const ProgramDaySchema = new mongoose.Schema(
+  {
+    date: { type: String, required: true },
+    meals: { type: [ProgramMealSchema], default: () => [] },
     macros: { type: MacroSchema, default: () => ({}) },
     macrosSource: {
-        type: String,
-        enum: ['auto', 'overridden'],
-        default: 'auto'
-    }
-}, { timestamps: true });
+      type: String,
+      enum: ['auto', 'overridden'],
+      default: 'auto',
+    },
+  },
+  { _id: false }
+);
 
-const ProgramSchema = new mongoose.Schema({
+const ProgramSchema = new mongoose.Schema(
+  {
     nutritionist: {
-        type: mongoose.Schema.ObjectId,
-        ref: 'User',
-        required: true
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
     },
     client: {
-        type: mongoose.Schema.ObjectId,
-        ref: 'Client',
-        required: true
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Client',
+      required: true,
     },
-    name: {
-        type: String,
-        required: true,
-        trim: true,
-        maxlength: 120
+    name: { type: String, default: '' },
+    startDate: { type: String, default: '' },
+    length: { type: Number, default: 0 },
+    macros: { type: MacroSchema, default: () => ({}) },
+    macrosSource: {
+      type: String,
+      enum: ['auto', 'overridden'],
+      default: 'auto',
     },
-    startDate: {
-        type: Date,
-        required: true
-    },
-    length: {
-        type: Number,
-        min: [1, 'Program length must be at least one day'],
-        required: true
-    },
-    notes: String,
-    days: { type: [ProgramDaySchema], default: [] }
-}, { timestamps: true });
+    days: { type: [ProgramDaySchema], default: () => [] },
+  },
+  { timestamps: true }
+);
 
-ProgramSchema.index({ nutritionist: 1, client: 1 });
-
-module.exports = mongoose.models.Program || mongoose.model('Program', ProgramSchema);
+module.exports = mongoose.model('Program', ProgramSchema);

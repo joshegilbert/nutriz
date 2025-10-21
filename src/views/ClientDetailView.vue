@@ -93,7 +93,21 @@ onMounted(() => {
   dataStore.fetchPrograms({ clientId }).catch(() => {});
 });
 
-const client = computed(() => clients.value.find((c) => c.id === clientId));
+const client = computed(() =>
+  clients.value.find((c) => String(c.id) === route.params.id)
+);
+
+function openWeekView(date) {
+  selectedDate.value = new Date(date);
+  viewMode.value = "week";
+}
+</script>
+
+<style scoped>
+.client-detail-view {
+  background-color: #f8f9fb;
+  min-height: 100vh;
+}
 
 const programsForClient = computed(() =>
   programs.value.filter((program) => program.clientId === clientId)
