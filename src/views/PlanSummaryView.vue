@@ -368,27 +368,18 @@ const client = computed(
     clients.value.find((entry) => String(entry.id) === clientId.value) || null
 );
 
-const program = ref(null);
-const isLoading = ref(true);
-const printArea = ref(null);
-const planNote = ref("");
+// Access store helpers for lookups and macro calculations
+const { getItemDetails, calculateItemMacros } = dataStore;
+const { clients } = storeToRefs(dataStore);
 
-// Email panel state
-const emailTo = ref("");
-const emailSubject = ref("");
-const emailBody = ref("");
-
-onMounted(async () => {
-  try {
-    const loaders = [];
-    if (!foods.value.length) loaders.push(dataStore.fetchFoods().catch(() => {}));
-    if (!meals.value.length) loaders.push(dataStore.fetchMeals().catch(() => {}));
-    if (!recipes.value.length) loaders.push(dataStore.fetchRecipes().catch(() => {}));
-    if (loaders.length) {
-      await Promise.all(loaders);
-    }
-  } catch (error) {
-    // Errors are handled by the shared store state
+const client = computed(() => {
+  const clientId = Number(route.params.id);
+  // Assuming client object might now have waterIntakeGoal and additionalOptions
+  const foundClient = clients.value.find((c) => c.id === clientId);
+  // Provide default values if not present to avoid errors
+  if (foundClient) {
+    if (!foundClient.waterIntakeGoal) foundClient.waterIntakeGoal = 2000; // Default to 2000ml
+    if (!foundClient.additionalOptions) foundClient.additionalOptions = [];
   }
   program.value = await dataStore.getProgramByClientId(clientId.value);
   isLoading.value = false;
@@ -401,140 +392,110 @@ onMounted(async () => {
 });
 
 const weeklyPlan = computed(() => {
-  if (!program.value) return [];
-  return (program.value.days || []).map((day) => {
-    const dayDate = parseISO(day.date);
-    const mealsForDay = (day.meals || []).map((meal) => {
-      const totals = dataStore.calcMealTotals(meal);
-      const items = (meal.items || []).map((item) => {
-        const detail = dataStore.getItemDetails(item.type, item.sourceId);
+  if (!client.value?.mealPlan) return [];
+
+  const daysOfWeek = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+  const mealTimes = ["Breakfast", "Lunch", "Dinner", "Snacks"];
+
+  return daysOfWeek.map(dayKey => {
+    const dayName = dayKey.charAt(0).toUpperCase() + dayKey.slice(1);
+    const planForDay = client.value.mealPlan[dayKey] || [];
+
+    const meals = mealTimes.map(mealTime => {
+      const itemsForMealtime = planForDay.filter(item => item.mealTime === mealTime);
+      
+      const itemsWithDetails = itemsForMealtime.map(item => {
+        const details = getItemDetails(item.type, item.sourceId);
         return {
           ...item,
-          displayName:
-            item.name ||
-            detail?.name ||
-            (item.type === "custom" ? "Custom item" : "Unnamed item"),
-          macros:
-            item.macrosSource === "overridden"
-              ? item.macros
-              : dataStore.calculateItemMacros(
-                  item.type,
-                  item.sourceId,
-                  item.amount || 1
-                ),
+          details: details || { name: "Unknown Item" },
         };
       });
-      return {
-        ...meal,
-        name: meal.name || meal.mealTime,
-        totals,
-        items,
-      };
-    });
 
-    const totals =
-      day.macrosSource === "overridden"
-        ? day.macros
-        : mealsForDay.reduce(
-            (acc, meal) => {
-              acc.calories += meal.totals.calories;
-              acc.protein += meal.totals.protein;
-              acc.carbs += meal.totals.carbs;
-              acc.fat += meal.totals.fat;
-              return acc;
-            },
-            { calories: 0, protein: 0, carbs: 0, fat: 0 }
-          );
+      const totals = itemsWithDetails.reduce((acc, item) => {
+        const itemMacros = calculateItemMacros(item.type, item.sourceId, item.amount ?? 1);
+        acc.calories += itemMacros.calories;
+        acc.protein += itemMacros.protein;
+        acc.carbs += itemMacros.carbs;
+        acc.fat += itemMacros.fat;
+        return acc;
+      }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
 
-    return {
-      date: day.date,
-      label: format(dayDate, "EEEE, MMM d"),
-      meals: mealsForDay,
-      totals,
-    };
+      return { mealTime, items: itemsWithDetails, totals };
+    }).filter(meal => meal.items.length > 0);
+
+    return { name: dayName, meals };
   });
 });
 
 const shoppingList = computed(() => {
-  if (!program.value) return [];
-  const accumulator = new Map();
+  if (!client.value?.mealPlan) return [];
 
-  const addFood = (food, amount) => {
-    if (!food || !amount) return;
-    const key = `food-${food.id}-${food.servingUnit}`;
-    if (!accumulator.has(key)) {
-      accumulator.set(key, {
-        key,
-        name: `${food.brand ? `${food.brand} · ` : ""}${food.name}`,
+  const ingredientsMap = new Map();
+
+  function addFoodToMap(food, quantity) {
+    if (!food) return;
+    const safeQuantity = Number(quantity);
+    if (!Number.isFinite(safeQuantity) || safeQuantity <= 0) return;
+    const key = `${food.id}-${food.servingUnit || "unit"}`;
+    if (!ingredientsMap.has(key)) {
+      ingredientsMap.set(key, {
+        id: food.id,
+        name: food.name,
         amount: 0,
-        unit: food.servingUnit || "serving",
+        unit: food.servingUnit || "unit",
       });
     }
-    accumulator.get(key).amount += amount;
-  };
+    const entry = ingredientsMap.get(key);
+    entry.amount += safeQuantity;
+  }
 
-  const expandItem = (item, multiplier = 1) => {
+  function addComponentsToMap(type, id, quantity = 1) {
+    const safeQuantity = Number(quantity);
+    if (!type || id == null || !Number.isFinite(safeQuantity) || safeQuantity <= 0) return;
+
+    if (type === "food") {
+      const food = getItemDetails("food", id);
+      addFoodToMap(food, safeQuantity);
+      return;
+    }
+
+    const item = getItemDetails(type, id);
     if (!item) return;
-    if (item.type === "food") {
-      const food = foods.value.find((f) => f.id === item.sourceId);
-      addFood(food, multiplier * (item.amount || 1));
-      return;
-    }
-    if (item.type === "meal") {
-      const template = meals.value.find((m) => m.id === item.sourceId);
-      (template?.components || []).forEach((component) => {
-        const factor =
-          multiplier * (item.amount || 1) * (component.amount || 1);
-        const food = foods.value.find((f) => f.id === component.foodId);
-        addFood(food, factor);
-      });
-      return;
-    }
-    if (item.type === "recipe") {
-      const recipe = recipes.value.find((r) => r.id === item.sourceId);
-      (recipe?.components || recipe?.ingredients || []).forEach((component) => {
-        if (component.foodId) {
-          const food = foods.value.find((f) => f.id === component.foodId);
-          const factor =
-            multiplier * (item.amount || 1) * (component.amount || 1);
-          addFood(food, factor);
-        } else if (component.type && component.id) {
-          expandItem(
-            {
-              type: component.type,
-              sourceId: component.id,
-              amount: (component.amount || 1) * (item.amount || 1),
-            },
-            multiplier
-          );
-        }
-      });
-      return;
-    }
-    if (item.type === "custom") {
-      const key = `custom-${item.name}`;
-      if (!accumulator.has(key)) {
-        accumulator.set(key, {
-          key,
-          name: item.name || "Custom item",
-          amount: multiplier * (item.amount || 1),
-          unit: item.unit || "serving",
-        });
-      } else {
-        accumulator.get(key).amount += multiplier * (item.amount || 1);
-      }
-    }
-  };
 
-  (program.value.days || []).forEach((day) => {
-    (day.meals || []).forEach((meal) => {
-      (meal.items || []).forEach((item) => expandItem(item, 1));
+    const components = item.components || item.ingredients || [];
+    components.forEach((component) => {
+      const baseQuantity = Number(component.amount ?? component.quantity ?? 1);
+      const normalisedBase = Number.isFinite(baseQuantity) && baseQuantity > 0 ? baseQuantity : 0;
+      const componentQuantity = normalisedBase > 0 ? normalisedBase * safeQuantity : safeQuantity;
+
+      if (componentQuantity <= 0) {
+        return;
+      }
+
+      if (component.customName) {
+        return;
+      }
+
+      if (component.type && component.sourceId != null) {
+        addComponentsToMap(component.type, component.sourceId, componentQuantity);
+        return;
+      }
+
+      const foodId = component.foodId ?? component.sourceId ?? component.id;
+      if (foodId != null) {
+        addComponentsToMap("food", foodId, componentQuantity);
+      }
     });
+  }
+
+  Object.values(client.value.mealPlan).flat().forEach((planItem) => {
+    const amount = Number(planItem.amount ?? 1);
+    const normalisedAmount = Number.isFinite(amount) ? amount : 1;
+    addComponentsToMap(planItem.type, planItem.sourceId, normalisedAmount);
   });
 
-  return Array.from(accumulator.values()).sort((a, b) =>
-    a.name.localeCompare(b.name)
-  );
+  return Array.from(ingredientsMap.values()).sort((a, b) => a.name.localeCompare(b.name));
 });
 
 function printPlan() {
