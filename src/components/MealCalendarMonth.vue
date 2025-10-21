@@ -49,11 +49,11 @@
           <div v-if="day.programDay">
             <div
               v-for="meal in day.programDay.meals"
-              :key="meal.mealTime"
+              :key="meal.id || meal.mealTime"
               class="text-caption meal-summary"
             >
-              <strong>{{ meal.mealTime }}:</strong>
-              <span v-if="meal.items.length === 0" class="text-grey">–</span>
+              <strong>{{ meal.name || meal.mealTime }}:</strong>
+              <span v-if="(meal.items || []).length === 0" class="text-grey">–</span>
               <span v-else>{{ meal.items.length }} item(s)</span>
             </div>
           </div>
