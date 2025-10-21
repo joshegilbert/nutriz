@@ -26,7 +26,7 @@
     />
 
     <v-card>
-      <v-progress-linear v-if="dataStore.loading.foods" indeterminate color="primary"></v-progress-linear>
+      <v-progress-linear v-if="isLoadingFoods" indeterminate color="primary"></v-progress-linear>
       <v-card-text>
         <v-row class="mb-4">
           <v-col cols="12" sm="6" md="4">

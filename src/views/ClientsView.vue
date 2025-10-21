@@ -26,7 +26,7 @@
     />
 
     <v-card>
-      <v-progress-linear v-if="dataStore.loading.clients" indeterminate color="primary"></v-progress-linear>
+      <v-progress-linear v-if="isLoadingClients" indeterminate color="primary"></v-progress-linear>
       <v-card-text>
         <v-data-table
           :headers="headers"
@@ -146,7 +146,6 @@
           <v-btn
             color="blue-darken-1"
             variant="text"
-            :loading="saving"
             @click="deleteClientConfirm"
             :loading="isLoadingClients"
           >

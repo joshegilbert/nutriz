@@ -1297,6 +1297,7 @@ export const useDataStore = defineStore("data", () => {
   return {
     clients,
     foods,
+    meals,
     recipes,
     clients,
     getItemDetails,
