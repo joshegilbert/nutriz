@@ -26,7 +26,7 @@
     />
 
     <v-card>
-      <v-progress-linear v-if="dataStore.loading.programs" indeterminate color="primary"></v-progress-linear>
+      <v-progress-linear v-if="isLoadingMeals" indeterminate color="primary"></v-progress-linear>
       <v-card-text>
         <v-data-table
           :headers="headers"
@@ -198,7 +198,6 @@
 import { ref, computed, onMounted } from "vue";
 import { useDataStore } from "@/stores/useDataStore";
 import { storeToRefs } from "pinia";
-import { useDataStore } from "@/stores/useDataStore";
 
 const dataStore = useDataStore();
 const { meals, foods, isLoadingMeals, lastError } = storeToRefs(dataStore);
@@ -346,9 +345,6 @@ function addComponent(type) {
   editedItem.value.components.push(createComponent(type));
 }
 
-const rules = {
-  required: (value) => !!value || "Required.",
-};
 
 function getServing(component) {
   if (!component || component.type === "custom") return component?.serving || "unit";

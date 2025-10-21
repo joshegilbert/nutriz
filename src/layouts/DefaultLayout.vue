@@ -55,6 +55,8 @@ const authStore = useAuthStore();
 const router = useRouter();
 
 const userEmail = computed(() => authStore.user?.email || "");
+// Define isDesktop using Vuetify's display breakpoints
+const isDesktop = computed(() => display.mdAndUp.value);
 
 async function handleLogout() {
   authStore.logout();
