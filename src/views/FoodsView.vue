@@ -28,13 +28,23 @@
     <v-card>
       <v-progress-linear v-if="isLoadingFoods" indeterminate color="primary"></v-progress-linear>
       <v-card-text>
-        <v-data-table
-          :headers="headers"
-          :items="foods"
-          item-key="id"
-          :loading="isLoadingFoods"
-          loading-text="Loading foods..."
-        >
+        <v-row class="mb-4">
+          <v-col cols="12" sm="6" md="4">
+            <v-text-field
+              v-model="search"
+              label="Search foods"
+              prepend-inner-icon="mdi-magnify"
+              clearable
+              hide-details
+            />
+          </v-col>
+        </v-row>
+
+        <v-data-table :headers="headers" :items="filteredFoods" item-key="id">
+          <template v-slot:item.serving="{ item }">
+            {{ item.servingSize }} {{ item.servingUnit }} ({{ item.gramsPerServing }}g)
+          </template>
+          
           <template v-slot:item.macros="{ item }">
             Cal: {{ item.caloriesPerServing }} / Prot: {{ item.proteinPerServing }}g /
             Carb: {{ item.carbsPerServing }}g / Fat: {{ item.fatPerServing }}g
@@ -166,7 +176,8 @@ const { foods, isLoadingFoods, lastError } = storeToRefs(dataStore);
 const dialog = ref(false);
 const dialogDelete = ref(false);
 const form = ref(null);
-const editedItem = ref(null);
+const editedIndex = ref(-1);
+const search = ref("");
 
 const defaultItem = {
   id: null,
@@ -197,15 +208,19 @@ const rules = { required: (value) => !!value || "Required." };
 
 const headers = ref([
   { title: "Food Item", key: "name", align: "start" },
-  { title: "Category", key: "category" },
-  { title: "Default Serving", key: "defaultServingSize" },
-  { title: "Macros", key: "macros", sortable: false },
+  { title: "Brand", key: "brand" },
+  { title: "Serving", key: "serving", sortable: false },
+  { title: "Macros (per Serving)", key: "macros", sortable: false },
   { title: "Actions", key: "actions", sortable: false },
 ]);
 
-onMounted(() => {
-  dataStore.fetchFoods().catch(() => {
-    /* handled by lastError */
+const filteredFoods = computed(() => {
+  const term = search.value.trim().toLowerCase();
+  if (!term) return foods.value;
+  return foods.value.filter((item) => {
+    const name = item.name?.toLowerCase() ?? "";
+    const brand = item.brand?.toLowerCase() ?? "";
+    return name.includes(term) || brand.includes(term);
   });
 });
 

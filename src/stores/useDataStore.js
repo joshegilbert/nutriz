@@ -40,6 +40,13 @@ function parseLocalISO(iso) {
   return new Date(y, (m || 1) - 1, d || 1);
 }
 
+export const MEAL_TIMES = Object.freeze([
+  "Breakfast",
+  "Lunch",
+  "Dinner",
+  "Snacks",
+]);
+
 export const useDataStore = defineStore("data", () => {
   // ---------------------------------------------------------------------------
   //  DATA LIBRARIES
@@ -501,63 +508,162 @@ export const useDataStore = defineStore("data", () => {
     return null;
   }
 
+  const EMPTY_MACROS = { calories: 0, protein: 0, carbs: 0, fat: 0 };
+
+  function normaliseNumber(value) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : 0;
+  }
+
+  function addMacros(base, addition) {
+    return {
+      calories: base.calories + normaliseNumber(addition?.calories),
+      protein: base.protein + normaliseNumber(addition?.protein),
+      carbs: base.carbs + normaliseNumber(addition?.carbs),
+      fat: base.fat + normaliseNumber(addition?.fat),
+    };
+  }
+
+  function scaleMacros(macros, factor) {
+    const multiplier = normaliseNumber(factor);
+    if (multiplier === 0) {
+      return { ...EMPTY_MACROS };
+    }
+
+    return {
+      calories: normaliseNumber(macros?.calories) * multiplier,
+      protein: normaliseNumber(macros?.protein) * multiplier,
+      carbs: normaliseNumber(macros?.carbs) * multiplier,
+      fat: normaliseNumber(macros?.fat) * multiplier,
+    };
+  }
+
+  function getItemDetails(type, id) {
+    if (!type) return null;
+
+    if (type === "food") {
+      return foods.value.find((f) => f.id === id) || null;
+    }
+
+    if (type === "meal") {
+      return meals.value.find((m) => m.id === id) || null;
+    }
+
+    if (type === "recipe") {
+      return recipes.value.find((r) => r.id === id) || null;
+    }
+
+    return null;
+  }
+
+  function collectComponentMacros(component) {
+    if (!component) return { ...EMPTY_MACROS };
+
+    if (component.macrosSource === "overridden" && component.macros) {
+      return {
+        calories: normaliseNumber(component.macros.calories),
+        protein: normaliseNumber(component.macros.protein),
+        carbs: normaliseNumber(component.macros.carbs),
+        fat: normaliseNumber(component.macros.fat),
+      };
+    }
+
+    if (component.customName) {
+      return {
+        calories: normaliseNumber(component.macros?.calories),
+        protein: normaliseNumber(component.macros?.protein),
+        carbs: normaliseNumber(component.macros?.carbs),
+        fat: normaliseNumber(component.macros?.fat),
+      };
+    }
+
+    const nestedType = component.type;
+    const nestedId = component.sourceId || component.id;
+
+    if (nestedType && nestedId != null) {
+      return calculateItemMacros(nestedType, nestedId, component.amount);
+    }
+
+    const foodId = component.foodId ?? component.sourceId ?? component.id;
+    if (foodId != null) {
+      const food = getItemDetails("food", foodId);
+      if (!food) return { ...EMPTY_MACROS };
+      return scaleMacros(food.macrosPerServing, component.amount ?? 1);
+    }
+
+    return { ...EMPTY_MACROS };
+  }
+
+  function collectMealMacros(components = []) {
+    return components.reduce((totals, component) => {
+      return addMacros(totals, collectComponentMacros(component));
+    }, { ...EMPTY_MACROS });
+  }
+
+  function collectRecipeMacros(components = []) {
+    return components.reduce((totals, component) => {
+      const componentType = component.type || (component.foodId ? "food" : null);
+
+      if (componentType === "food") {
+        const foodId = component.foodId ?? component.sourceId ?? component.id;
+        if (foodId == null) {
+          return totals;
+        }
+
+        const food = getItemDetails("food", foodId);
+        if (!food) {
+          return totals;
+        }
+
+        const macros = scaleMacros(food.macrosPerServing, component.amount ?? 1);
+        return addMacros(totals, macros);
+      }
+
+      if (componentType && component.sourceId != null) {
+        const macros = calculateItemMacros(componentType, component.sourceId, component.amount);
+        return addMacros(totals, macros);
+      }
+
+      return addMacros(totals, component.macros);
+    }, { ...EMPTY_MACROS });
+  }
+
   function calculateItemMacros(type, id, amount = 1) {
-    const details = getItemDetails(type, id);
-    if (!details) {
-      return createMacroTotals();
+    const quantity = amount == null ? 1 : normaliseNumber(amount);
+    if (!type || id == null || quantity <= 0) {
+      return { ...EMPTY_MACROS };
     }
 
     if (type === "food") {
-      const macros = details.macrosPerServing || {};
-      return roundMacros({
-        calories: (macros.calories || 0) * amount,
-        protein: (macros.protein || 0) * amount,
-        carbs: (macros.carbs || 0) * amount,
-        fat: (macros.fat || 0) * amount,
-      });
+      const food = getItemDetails("food", id);
+      if (!food) return { ...EMPTY_MACROS };
+      return scaleMacros(food.macrosPerServing, quantity);
     }
 
-    const components = details.components || details.ingredients || [];
-    const totals = components.reduce((acc, component) => {
-      let componentAmount = component.amount ?? component.quantity ?? 1;
+    if (type === "meal") {
+      const meal = getItemDetails("meal", id);
+      if (!meal) return { ...EMPTY_MACROS };
+      const baseMacros = collectMealMacros(meal.components);
+      return scaleMacros(baseMacros, quantity);
+    }
 
-      if (component.type && component.id) {
-        const nested = calculateItemMacros(
-          component.type,
-          component.id,
-          componentAmount
-        );
-        acc.calories += nested.calories;
-        acc.protein += nested.protein;
-        acc.carbs += nested.carbs;
-        acc.fat += nested.fat;
-        return acc;
-      }
+    if (type === "recipe") {
+      const recipe = getItemDetails("recipe", id);
+      if (!recipe) return { ...EMPTY_MACROS };
+      const baseMacros = collectRecipeMacros(recipe.components);
+      return scaleMacros(baseMacros, quantity);
+    }
 
-      if (component.foodId) {
-        const food = foods.value.find((f) => f.id === component.foodId);
-        if (!food) return acc;
-        const macros = food.macrosPerServing || {};
-        acc.calories += (macros.calories || 0) * componentAmount;
-        acc.protein += (macros.protein || 0) * componentAmount;
-        acc.carbs += (macros.carbs || 0) * componentAmount;
-        acc.fat += (macros.fat || 0) * componentAmount;
-      }
-      return acc;
-    }, createMacroTotals());
-
-    totals.calories *= amount;
-    totals.protein *= amount;
-    totals.carbs *= amount;
-    totals.fat *= amount;
-
-    return roundMacros(totals);
+    return { ...EMPTY_MACROS };
   }
 
-  function calcMealTotals(meal) {
-    if (!meal) return createMacroTotals();
-    if (meal.macrosSource === "overridden") {
-      return roundMacros(meal.macros);
+  function recalcMealTotals(meal) {
+    const totals = { calories: 0, protein: 0, carbs: 0, fat: 0 };
+    for (const item of meal.items) {
+      totals.calories += item.macros?.calories || 0;
+      totals.protein += item.macros?.protein || 0;
+      totals.carbs += item.macros?.carbs || 0;
+      totals.fat += item.macros?.fat || 0;
     }
 
     const totals = (meal.items || []).reduce((acc, item) => {
@@ -1193,30 +1299,12 @@ export const useDataStore = defineStore("data", () => {
     foods,
     meals,
     recipes,
-    isLoadingClients,
-    isLoadingFoods,
-    isLoadingMeals,
-    isLoadingRecipes,
-    lastError,
-    fetchClients,
-    createClient,
-    updateClient,
-    deleteClient,
-    fetchFoods,
-    createFood,
-    updateFood,
-    deleteFood,
-    fetchMeals,
-    createMealTemplate,
-    updateMealTemplate,
-    deleteMealTemplate,
-    fetchRecipes,
-    createRecipe,
-    updateRecipe,
-    deleteRecipe,
-    // lookups & math
+    clients,
     getItemDetails,
     calculateItemMacros,
+    getProgramByClientId,
+    updateProgram,
+    recalcDayTotals,
     calcMealTotals,
     recalcMealTotals,
     recalcDayTotals,
