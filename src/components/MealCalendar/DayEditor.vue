@@ -10,6 +10,35 @@
             <p class="text-subtitle-2 text-grey-lighten-1 font-weight-regular">
               {{ formattedDate }}
             </p>
+            <!-- Variant switcher -->
+            <div class="variant-row d-flex align-center" style="gap: 8px;">
+              <v-btn-toggle
+                v-model="activeVariantKey"
+                density="compact"
+                variant="outlined"
+                color="primary"
+                mandatory
+                class="variant-toggle"
+              >
+                <v-btn
+                  v-for="v in variantKeys"
+                  :key="v"
+                  :value="v"
+                  size="x-small"
+                >
+                  {{ v }}
+                </v-btn>
+              </v-btn-toggle>
+              <v-btn
+                v-if="variantKeys.length < 2"
+                size="x-small"
+                variant="text"
+                prepend-icon="mdi-plus"
+                @click="addVariantB"
+              >
+                Add option
+              </v-btn>
+            </div>
           </v-col>
           <v-spacer />
           <v-col cols="12" md="auto" class="d-none d-md-flex justify-end">
@@ -83,11 +112,7 @@
         />
       </v-card-text>
 
-      <v-divider />
-
-      <v-card-actions class="pa-4">
-        <DailySummary :day="day" @updateDay="handleSummaryUpdate" />
-      </v-card-actions>
+      
     </v-card>
 
     <v-dialog v-model="showCreateMeal" max-width="420">
@@ -127,7 +152,7 @@ import { computed, reactive, ref } from "vue";
 import { format } from "date-fns";
 import { useDataStore } from "@/stores/useDataStore";
 import MealTimeBlock from "./MealTimeBlock.vue";
-import DailySummary from "./DailySummary.vue";
+// DailySummary removed; totals are shown in header
 
 const props = defineProps({
   day: { type: Object, required: true },
@@ -157,6 +182,30 @@ const formattedDate = computed(() =>
 );
 
 const mealsLibrary = computed(() => props.meals);
+
+// Variants (A/B) support
+const variantKeys = computed(() => {
+  const vs = Array.isArray(props.day.variants) ? props.day.variants : [];
+  return vs.map((v) => v.key || "A");
+});
+
+const activeVariantKey = computed({
+  get() {
+    return props.day.activeVariant || variantKeys.value[0] || "A";
+  },
+  set(val) {
+    const updated = cloneDay(props.day);
+    store.setActiveVariant(updated, val);
+    emit("updateDay", updated);
+  },
+});
+
+function addVariantB() {
+  const updated = cloneDay(props.day);
+  store.ensureVariant(updated, "B", { duplicateFrom: "A" });
+  store.setActiveVariant(updated, "B");
+  emit("updateDay", updated);
+}
 
 const sortedMeals = computed(() => {
   return [...(props.day.meals || [])].sort((a, b) => {
@@ -218,9 +267,7 @@ function handleMealUpdate(updatedMeal) {
   emit("updateDay", updatedDay);
 }
 
-function handleSummaryUpdate(updatedDay) {
-  emit("updateDay", updatedDay);
-}
+// summary handler no longer needed (card removed)
 
 function cloneDay(day) {
   return JSON.parse(JSON.stringify(day));

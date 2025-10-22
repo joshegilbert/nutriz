@@ -807,13 +807,39 @@ export const useDataStore = defineStore("data", () => {
   }
 
   function toDay(day) {
+    const baseMeals = Array.isArray(day.meals) ? day.meals.map((m) => toMeal(m)) : [];
+    // Variants support: prefer variants' active set if present
+    const variants = Array.isArray(day.variants)
+      ? day.variants.map((v) => ({
+          key: String(v.key || "A"),
+          label: v.label || "",
+          meals: Array.isArray(v.meals) ? v.meals.map((m) => toMeal(m)) : [],
+          macros: createMacroTotals(v.macros),
+          macrosSource: v.macrosSource === "overridden" ? "overridden" : "auto",
+        }))
+      : [];
+    const activeKey = day.activeVariant || (variants[0]?.key ?? "A");
+    const activeMeals = variants.length
+      ? (variants.find((v) => v.key === activeKey)?.meals || variants[0].meals)
+      : baseMeals;
+
     return {
       date: day.date,
-      meals: Array.isArray(day.meals)
-        ? day.meals.map((meal) => toMeal(meal))
-        : [],
+      meals: activeMeals,
       macros: createMacroTotals(day.macros),
       macrosSource: day.macrosSource || "auto",
+      activeVariant: activeKey,
+      variants: variants.length
+        ? variants
+        : [
+            {
+              key: "A",
+              label: "Option A",
+              meals: baseMeals,
+              macros: createMacroTotals(day.macros),
+              macrosSource: day.macrosSource || "auto",
+            },
+          ],
     };
   }
 
@@ -1170,6 +1196,7 @@ export const useDataStore = defineStore("data", () => {
         date: day.date,
         macros: roundMacros(day.macros),
         macrosSource: day.macrosSource === "overridden" ? "overridden" : "auto",
+        // Persist active set on the top-level meals for backward compatibility
         meals: (day.meals || []).map((meal) => ({
           id: meal.id,
           name: meal.name || meal.mealTime || "Meal",
@@ -1188,6 +1215,33 @@ export const useDataStore = defineStore("data", () => {
             time: item.time || "",
             macros: roundMacros(item.macros),
             macrosSource: item.macrosSource === "overridden" ? "overridden" : "auto",
+          })),
+        })),
+        activeVariant: day.activeVariant || "A",
+        variants: (day.variants || []).map((v) => ({
+          key: String(v.key || "A"),
+          label: v.label || "",
+          macros: roundMacros(v.macros || day.macros),
+          macrosSource: v.macrosSource === "overridden" ? "overridden" : "auto",
+          meals: (v.meals || []).map((meal) => ({
+            id: meal.id,
+            name: meal.name || meal.mealTime || "Meal",
+            mealTime: meal.mealTime || meal.name || "Meal",
+            time: meal.time || "",
+            macros: roundMacros(meal.macros),
+            macrosSource: meal.macrosSource === "overridden" ? "overridden" : "auto",
+            items: (meal.items || []).map((item) => ({
+              id: item.id,
+              type: item.type || (item.sourceId ? "food" : "custom"),
+              sourceId: item.sourceId ?? null,
+              name: item.name || "",
+              amount: Number(item.amount) || 0,
+              unit: item.unit || "",
+              notes: item.notes || "",
+              time: item.time || "",
+              macros: roundMacros(item.macros),
+              macrosSource: item.macrosSource === "overridden" ? "overridden" : "auto",
+            })),
           })),
         })),
       })),
@@ -1382,6 +1436,38 @@ export const useDataStore = defineStore("data", () => {
   function recalcDayTotals(day) {
     if (!day || day.macrosSource === "overridden") return;
     day.macros = calcDayTotals(day);
+  }
+
+  // ------------------------------
+  //  VARIANTS (A/B day options)
+  // ------------------------------
+  function ensureVariant(day, key = "B", { duplicateFrom = "A", label } = {}) {
+    if (!day) return;
+    if (!Array.isArray(day.variants)) day.variants = [];
+    const exists = day.variants.find((v) => v.key === key);
+    if (exists) return exists;
+    const source = day.variants.find((v) => v.key === duplicateFrom) || day.variants[0];
+    const next = {
+      key,
+      label: label || (key === "A" ? "Option A" : `Option ${key}`),
+      meals: (source?.meals || []).map((m) => toMeal(m)),
+      macros: createMacroTotals(source?.macros || day.macros),
+      macrosSource: source?.macrosSource || day.macrosSource || "auto",
+    };
+    day.variants.push(next);
+    return next;
+  }
+
+  function setActiveVariant(day, key) {
+    if (!day || !Array.isArray(day.variants)) return;
+    const target = day.variants.find((v) => v.key === key);
+    if (!target) return;
+    day.activeVariant = key;
+    // Swap active meals to top-level for editor and calculations
+    day.meals = target.meals.map((m) => toMeal(m));
+    if (day.macrosSource !== "overridden") {
+      recalcDayTotals(day);
+    }
   }
 
   function setLastError(err) {
@@ -2005,6 +2091,9 @@ export const useDataStore = defineStore("data", () => {
     updateMeal,
     ensureProgramIncludesDate,
     createMeal,
+    attachItemToMeal,
+    removeItemFromMeal,
+    duplicateMealItems,
 
     // calculators/utils
     getItemDetails,
@@ -2012,6 +2101,8 @@ export const useDataStore = defineStore("data", () => {
     calcMealTotals,
     recalcMealTotals,
     recalcDayTotals,
+    ensureVariant,
+    setActiveVariant,
 
     // clipboard
     mealClipboard,

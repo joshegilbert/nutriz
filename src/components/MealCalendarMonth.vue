@@ -12,6 +12,14 @@
       </v-btn>
     </div>
 
+    <!-- Legend -->
+    <div class="legend">
+      <v-chip size="x-small" class="kcal-chip" variant="flat">kcal</v-chip>
+      <v-chip size="x-small" class="p-chip" variant="tonal">P</v-chip>
+      <v-chip size="x-small" class="c-chip" variant="tonal">C</v-chip>
+      <v-chip size="x-small" class="f-chip" variant="tonal">F</v-chip>
+    </div>
+
     <!-- Day Names -->
     <div class="day-names">
       <div v-for="dayName in dayNames" :key="dayName" class="day-name">
@@ -47,14 +55,32 @@
 
         <div class="cell-body">
           <div v-if="day.programDay">
-            <div
-              v-for="meal in day.programDay.meals"
-              :key="meal.id || meal.mealTime"
-              class="text-caption meal-summary"
-            >
-              <strong>{{ meal.name || meal.mealTime }}:</strong>
-              <span v-if="(meal.items || []).length === 0" class="text-grey">–</span>
-              <span v-else>{{ meal.items.length }} item(s)</span>
+            <div class="macro-chips">
+              <v-chip size="x-small" density="compact" class="kcal-chip mini-chip" variant="flat">
+                {{ Math.round(day.programDay.macros?.calories || 0) }}
+              </v-chip>
+              <v-chip
+                v-if="day.programDay.activeVariant && day.programDay.activeVariant !== 'A'"
+                size="x-small"
+                density="compact"
+                class="variant-chip mini-chip"
+                variant="outlined"
+              >
+                {{ day.programDay.activeVariant }}
+              </v-chip>
+              <v-chip size="x-small" density="compact" class="p-chip mini-chip" variant="tonal">
+                P{{ +(day.programDay.macros?.protein || 0).toFixed(0) }}
+              </v-chip>
+              <v-chip size="x-small" density="compact" class="c-chip mini-chip" variant="tonal">
+                C{{ +(day.programDay.macros?.carbs || 0).toFixed(0) }}
+              </v-chip>
+              <v-chip size="x-small" density="compact" class="f-chip mini-chip" variant="tonal">
+                F{{ +(day.programDay.macros?.fat || 0).toFixed(0) }}
+              </v-chip>
+            </div>
+            <div class="text-caption text-grey meal-count d-flex align-center">
+              <v-icon size="x-small" class="mr-1">mdi-silverware-fork-knife</v-icon>
+              {{ (day.programDay.meals || []).length }} meal{{ (day.programDay.meals || []).length === 1 ? '' : 's' }}
             </div>
           </div>
           <div v-else class="text-caption text-grey no-plan">No plan</div>
@@ -117,6 +143,7 @@ const calendarDays = computed(() => {
   return days;
 });
 
+
 const monthLabel = computed(() => format(currentDate.value, "MMMM yyyy"));
 
 function prevMonth() {
@@ -150,6 +177,13 @@ function goToToday() {
   gap: 8px;
 }
 
+.legend {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
 /* Day Names Row */
 .day-names {
   display: grid;
@@ -163,15 +197,15 @@ function goToToday() {
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 6px;
+  gap: 8px;
 }
 
 .calendar-cell {
-  background-color: #fafafa;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 6px;
-  height: 130px;
+  background-color: #ffffff;
+  border: 1px solid #e6ebf5;
+  border-radius: 10px;
+  padding: 8px;
+  min-height: 120px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
@@ -180,12 +214,17 @@ function goToToday() {
 }
 
 .calendar-cell:hover {
-  transform: scale(1.02);
-  background-color: #fff;
+  transform: scale(1.015);
+  background-color: #f9fbff;
 }
 
 .current-month {
-  background-color: #fff;
+  background-color: #ffffff;
+}
+
+.calendar-cell:not(.current-month) {
+  background-color: #f8fafc;
+  border-color: #e5e7eb;
 }
 
 .today {
@@ -207,5 +246,44 @@ function goToToday() {
 .no-plan {
   font-style: italic;
   color: #999;
+}
+
+.macro-chips {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.kcal-chip {
+  background: #111827;
+  color: #fff;
+}
+.p-chip {
+  color: #155e75;
+  background: #ecfeff;
+}
+.c-chip {
+  color: #7c2d12;
+  background: #fff7ed;
+}
+.f-chip {
+  color: #14532d;
+  background: #ecfdf5;
+}
+
+.mini-chip {
+  padding: 0 6px !important;
+  height: 20px !important;
+  font-size: 0.7rem !important;
+}
+
+.variant-chip {
+  border-color: #90caf9 !important;
+  color: #1976d2 !important;
+}
+
+.meal-count {
+  margin-top: 6px;
 }
 </style>

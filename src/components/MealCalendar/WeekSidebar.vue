@@ -21,6 +21,27 @@
         @click="nextWeek"
         :disabled="currentWeekIndex === totalWeeks - 1"
       />
+  </div>
+    <v-divider class="mb-2" />
+
+    <!-- Weekly Averages (compact) -->
+    <div class="avg-grid mb-3">
+      <div class="avg-item">
+        <span class="label">Cal</span>
+        <span class="value">{{ weeklyAverages.calories }}</span>
+      </div>
+      <div class="avg-item">
+        <span class="label">P</span>
+        <span class="value">{{ weeklyAverages.protein }}</span>
+      </div>
+      <div class="avg-item">
+        <span class="label">C</span>
+        <span class="value">{{ weeklyAverages.carbs }}</span>
+      </div>
+      <div class="avg-item">
+        <span class="label">F</span>
+        <span class="value">{{ weeklyAverages.fat }}</span>
+      </div>
     </div>
 
     <v-divider class="mb-3" />
@@ -39,6 +60,15 @@
           <div class="day-info">
             <div class="day-name">
               {{ format(localDateFromISO(day.date), "EEEE") }}
+              <v-chip
+                v-if="day.activeVariant && day.activeVariant !== 'A'"
+                size="x-small"
+                class="ml-1"
+                variant="tonal"
+                color="primary"
+              >
+                {{ day.activeVariant }}
+              </v-chip>
             </div>
             <div class="day-date text-grey-darken-1">
               {{ format(localDateFromISO(day.date), "MMM d") }}
@@ -69,7 +99,8 @@
       </v-sheet>
     </div>
 
-    <v-divider class="my-4" />
+    
+    
 
     <!-- Copy / Paste Controls -->
     <v-row no-gutters class="action-row">
@@ -129,6 +160,29 @@ const visibleDays = computed(() => {
   const start = currentWeekIndex.value * daysPerWeek;
   const end = start + daysPerWeek;
   return props.program.days.slice(start, end);
+});
+
+// Weekly averages across visible days
+const weeklyAverages = computed(() => {
+  const days = visibleDays.value || [];
+  const count = days.length || 1;
+  const totals = days.reduce(
+    (acc, d) => {
+      const m = d?.macros || {};
+      acc.calories += Number(m.calories || 0);
+      acc.protein += Number(m.protein || 0);
+      acc.carbs += Number(m.carbs || 0);
+      acc.fat += Number(m.fat || 0);
+      return acc;
+    },
+    { calories: 0, protein: 0, carbs: 0, fat: 0 }
+  );
+  return {
+    calories: Math.round(totals.calories / count),
+    protein: +(totals.protein / count).toFixed(1),
+    carbs: +(totals.carbs / count).toFixed(1),
+    fat: +(totals.fat / count).toFixed(1),
+  };
 });
 
 // 📆 Display range label
@@ -214,6 +268,32 @@ watch(
 .week-range {
   flex: 1;
   text-align: center;
+}
+
+.avg-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.avg-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f5f7fb;
+  border: 1px solid #e6ebf5;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 0.85rem;
+}
+
+.avg-item .label {
+  color: #6b7280;
+}
+
+.avg-item .value {
+  font-weight: 600;
+  color: #111827;
 }
 
 .day-list {

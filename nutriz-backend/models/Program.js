@@ -61,6 +61,22 @@ const ProgramDaySchema = new mongoose.Schema(
       enum: ['auto', 'overridden'],
       default: 'auto',
     },
+    // Variants support (A/B day options)
+    activeVariant: { type: String, default: 'A' },
+    variants: {
+      type: [new mongoose.Schema({
+        key: { type: String, required: true },
+        label: { type: String, default: '' },
+        meals: { type: [ProgramMealSchema], default: () => [] },
+        macros: { type: MacroSchema, default: () => ({}) },
+        macrosSource: {
+          type: String,
+          enum: ['auto', 'overridden'],
+          default: 'auto',
+        },
+      }, { _id: false })],
+      default: () => [],
+    },
   },
   { _id: false }
 );

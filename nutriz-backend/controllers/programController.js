@@ -41,12 +41,46 @@ const normaliseMeal = (meal = {}) => ({
   macrosSource: meal.macrosSource === 'overridden' ? 'overridden' : 'auto',
 });
 
-const normaliseDay = (day = {}) => ({
-  date: day.date || '',
-  meals: Array.isArray(day.meals) ? day.meals.map(normaliseMeal) : [],
-  macros: normaliseMacros(day.macros),
-  macrosSource: day.macrosSource === 'overridden' ? 'overridden' : 'auto',
+const normaliseVariant = (variant = {}) => ({
+  key: String(variant.key || 'A'),
+  label: variant.label || '',
+  meals: Array.isArray(variant.meals) ? variant.meals.map(normaliseMeal) : [],
+  macros: normaliseMacros(variant.macros),
+  macrosSource: variant.macrosSource === 'overridden' ? 'overridden' : 'auto',
 });
+
+const normaliseDay = (day = {}) => {
+  const out = {
+    date: day.date || '',
+    meals: Array.isArray(day.meals) ? day.meals.map(normaliseMeal) : [],
+    macros: normaliseMacros(day.macros),
+    macrosSource: day.macrosSource === 'overridden' ? 'overridden' : 'auto',
+    activeVariant: day.activeVariant || 'A',
+    variants: Array.isArray(day.variants) ? day.variants.map(normaliseVariant) : [],
+  };
+
+  // If variants provided, keep meals in sync with active variant for convenience
+  if (out.variants.length) {
+    const active = out.variants.find(v => v.key === out.activeVariant) || out.variants[0];
+    out.activeVariant = active.key;
+    out.meals = active.meals;
+  }
+  // If no variants and meals exist, create a default A variant for storage consistency
+  else if (out.meals.length) {
+    out.variants = [
+      {
+        key: 'A',
+        label: 'Option A',
+        meals: out.meals,
+        macros: out.macros,
+        macrosSource: out.macrosSource,
+      },
+    ];
+    out.activeVariant = 'A';
+  }
+
+  return out;
+};
 
 const buildProgramPayload = (body = {}) => {
   const startDate = body.startDate || (body.days?.[0]?.date ?? '');
