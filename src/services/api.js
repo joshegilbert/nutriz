@@ -1,7 +1,20 @@
 import axios from 'axios';
 
+const baseApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+const normalizedBaseUrl = baseApiUrl.endsWith('/api')
+  ? baseApiUrl
+  : `${baseApiUrl.replace(/\/$/, '')}/api`;
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  baseURL: normalizedBaseUrl,
+});
+
+api.interceptors.request.use((config) => {
+  if (typeof config.url === 'string' && config.url.startsWith('/')) {
+    config.url = config.url.slice(1);
+  }
+  return config;
 });
 
 export const setAuthToken = (token) => {
