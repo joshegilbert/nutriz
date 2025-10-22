@@ -55,6 +55,12 @@
           value="recipes"
           to="/recipes"
         ></v-list-item>
+        <v-list-item
+          prepend-icon="mdi-file-chart"
+          title="Reports"
+          value="reports"
+          to="/reports"
+        ></v-list-item>
       </v-list>
     </v-navigation-drawer>
 
