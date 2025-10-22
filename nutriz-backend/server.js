@@ -70,7 +70,11 @@ app.use('/api/programs', programRoutes);   // Program routes
 
 // Basic route
 app.get('/', (req, res) => {
-    res.send('API is running...');
+  res.send('API is running...');
+});
+
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
 });
 
 // Error Handling Middleware (should be last middleware)
