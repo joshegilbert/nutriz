@@ -4,7 +4,9 @@
   "main": "index.js",
   "scripts": {
     "test": "node tests/mealHelpers.test.js",
-    "dev": "vite"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 4173"
   },
   "keywords": [],
   "author": "",
@@ -12,7 +14,6 @@
   "description": "",
   "dependencies": {
     "@mdi/font": "^7.4.47",
-    "axios": "^1.7.7",
     "date-fns": "^4.1.0",
     "axios": "^1.7.7",
     "pinia": "^3.0.3",

@@ -401,10 +401,12 @@
 </template>
 
 <script setup>
-import { ref, computed, defineAsyncComponent, nextTick } from "vue";
+import { ref, computed, nextTick, onMounted } from "vue";
 import { useRoute } from "vue-router";
-import { MEAL_TIMES, useDataStore } from "@/stores/useDataStore";
+import { useDataStore } from "@/stores/useDataStore";
 import { storeToRefs } from "pinia";
+import MealCalendar from "@/components/MealCalendar/index.vue";
+import MealCalendarMonth from "@/components/MealCalendarMonth.vue";
 import {
   addDays,
   differenceInCalendarDays,
@@ -416,7 +418,7 @@ import {
 
 const route = useRoute();
 const dataStore = useDataStore();
-const { clients, programs } = storeToRefs(dataStore);
+const { clients } = storeToRefs(dataStore);
 
 const viewMode = ref("week");
 const aboutDialog = ref(false);
@@ -498,6 +500,22 @@ const formRules = {
   },
 };
 
+// Ensure data is loaded when landing directly on this view
+onMounted(async () => {
+  try {
+    if (!clients.value?.length) {
+      await dataStore.fetchClients().catch(() => {});
+    }
+    await Promise.all([
+      dataStore.fetchFoods().catch(() => {}),
+      dataStore.fetchMeals().catch(() => {}),
+      dataStore.fetchRecipes().catch(() => {}),
+    ]);
+  } catch (e) {
+    // surfaced via store lastError
+  }
+});
+
 const client = computed(() =>
   clients.value.find((c) => String(c.id) === route.params.id)
 );
@@ -505,12 +523,41 @@ const client = computed(() =>
 const activeProgram = computed(() => client.value?.programs?.[0] ?? null);
 const activeProgramId = computed(() => activeProgram.value?.id ?? null);
 
+function enrichProgramDay(day) {
+  if (!day) return null;
+  const dateObj = day.date ? new Date(day.date) : null;
+  const meals = Array.isArray(day.meals) ? day.meals : [];
+  const totals = meals.reduce(
+    (acc, meal) => {
+      const m = meal?.macros || (meal?.items || []).reduce(
+        (a, item) => {
+          const im = item?.macros || {};
+          a.calories += im.calories || 0;
+          a.protein += im.protein || 0;
+          a.carbs += im.carbs || 0;
+          a.fat += im.fat || 0;
+          return a;
+        },
+        { calories: 0, protein: 0, carbs: 0, fat: 0 }
+      );
+      acc.calories += m.calories || 0;
+      acc.protein += m.protein || 0;
+      acc.carbs += m.carbs || 0;
+      acc.fat += m.fat || 0;
+      return acc;
+    },
+    { calories: 0, protein: 0, carbs: 0, fat: 0 }
+  );
+  const plannedItemCount = meals.reduce((acc, meal) => acc + (meal?.items?.length || 0), 0);
+  return { ...day, dateObj, totals, plannedItemCount };
+}
+
 const enrichedProgramDays = computed(() => {
   if (!activeProgram.value?.days) return [];
   return activeProgram.value.days
     .map(enrichProgramDay)
     .filter(Boolean)
-    .sort((a, b) => a.dateObj - b.dateObj);
+    .sort((a, b) => (a.dateObj?.getTime?.() || 0) - (b.dateObj?.getTime?.() || 0));
 });
 
 const hasActiveProgram = computed(() => Boolean(activeProgram.value));
@@ -628,6 +675,21 @@ const contactInfo = computed(() => {
   };
 });
 
+// Program detail labels for the About dialog
+const primaryProgram = activeProgram;
+const programStartLabel = computed(() => primaryProgram.value?.startDate || "Not set");
+const programLengthLabel = computed(() => {
+  const len = primaryProgram.value?.length || 0;
+  return len ? `${len} day${len === 1 ? "" : "s"}` : "Not set";
+});
+const programEndLabel = computed(() => {
+  if (primaryProgram.value?.startDate && primaryProgram.value?.length) {
+    const end = addDays(parseISO(primaryProgram.value.startDate), primaryProgram.value.length - 1);
+    return toLocalISODate(end);
+  }
+  return "Not set";
+});
+
 const clientInitials = computed(() => {
   const name = (client.value?.name || "").trim();
   if (!name) return "N/A";
@@ -638,21 +700,11 @@ const clientInitials = computed(() => {
 
 const goalList = computed(() => {
   const goals = client.value?.goals;
-  if (Array.isArray(goals)) return goals.length ? goals : [];
+  if (Array.isArray(goals)) return goals.filter((g) => !!(g && String(g).trim()));
   if (typeof goals === "string" && goals.trim().length > 0) {
     return goals.split("\n").map((goal) => goal.trim()).filter(Boolean);
   }
-  const diff = differenceInCalendarDays(focusDay.value.dateObj, today.value);
-  if (diff === 0) {
-    return { descriptor: "Today" };
-  }
-  if (diff === 1) {
-    return { descriptor: "Tomorrow" };
-  }
-  if (diff > 1) {
-    return { descriptor: `In ${diff} days` };
-  }
-  return { descriptor: `${Math.abs(diff)} day(s) ago` };
+  return [];
 });
 
 const upcomingDays = computed(() => {
@@ -946,29 +998,6 @@ function mealSummary(meal) {
 .client-detail-view {
   background-color: #f8f9fb;
   min-height: 100vh;
-}
-
-const programsForClient = computed(() =>
-  programs.value.filter((program) => program.clientId === clientId)
-);
-
-function formatDate(value) {
-  if (!value) return "—";
-  return new Date(value).toLocaleDateString();
-}
-
-function totalProgramMacros(program) {
-  return program.days?.reduce(
-    (totals, day) => {
-      if (!day?.macros) return totals;
-      totals.calories += day.macros.calories || 0;
-      totals.protein += day.macros.protein || 0;
-      totals.carbs += day.macros.carbs || 0;
-      totals.fat += day.macros.fat || 0;
-      return totals;
-    },
-    { calories: 0, protein: 0, carbs: 0, fat: 0 }
-  ) || { calories: 0, protein: 0, carbs: 0, fat: 0 };
 }
 
 .client-header {

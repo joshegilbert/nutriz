@@ -742,14 +742,6 @@ export const useDataStore = defineStore("data", () => {
       ],
     },
   ]);
-  const foods = ref([]);
-
-  const meals = ref([]);
-
-  const recipes = ref([]);
-
-  const clients = ref([]);
-
   const isLoadingClients = ref(false);
   const isLoadingFoods = ref(false);
   const isLoadingMeals = ref(false);
@@ -1229,23 +1221,7 @@ export const useDataStore = defineStore("data", () => {
     };
   }
 
-  function getItemDetails(type, id) {
-    if (!type) return null;
-
-    if (type === "food") {
-      return foods.value.find((f) => f.id === id) || null;
-    }
-
-    if (type === "meal") {
-      return meals.value.find((m) => m.id === id) || null;
-    }
-
-    if (type === "recipe") {
-      return recipes.value.find((r) => r.id === id) || null;
-    }
-
-    return null;
-  }
+  // NOTE: getItemDetails declared above (with null-check) — remove duplicate
 
   function collectComponentMacros(component) {
     if (!component) return { ...EMPTY_MACROS };
@@ -1348,25 +1324,18 @@ export const useDataStore = defineStore("data", () => {
     return { ...EMPTY_MACROS };
   }
 
-  function recalcMealTotals(meal) {
-    const totals = { calories: 0, protein: 0, carbs: 0, fat: 0 };
-    for (const item of meal.items) {
-      totals.calories += item.macros?.calories || 0;
-      totals.protein += item.macros?.protein || 0;
-      totals.carbs += item.macros?.carbs || 0;
-      totals.fat += item.macros?.fat || 0;
-    }
-
+  function calcMealTotals(meal) {
+    if (!meal) return createMacroTotals();
     const totals = (meal.items || []).reduce((acc, item) => {
       const macros =
-        item.macrosSource === "overridden"
+        item?.macrosSource === "overridden"
           ? item.macros
           : calculateItemMacros(item.type, item.sourceId, item.amount);
 
-      acc.calories += macros.calories || 0;
-      acc.protein += macros.protein || 0;
-      acc.carbs += macros.carbs || 0;
-      acc.fat += macros.fat || 0;
+      acc.calories += macros?.calories || 0;
+      acc.protein += macros?.protein || 0;
+      acc.carbs += macros?.carbs || 0;
+      acc.fat += macros?.fat || 0;
       return acc;
     }, createMacroTotals());
 
@@ -1449,7 +1418,6 @@ export const useDataStore = defineStore("data", () => {
   //  ACTIONS
   // ---------------------------------------------------------------------------
   async function fetchClients({ force = false } = {}) {
-    if (clients.value.length && !force) return clients.value;
     isLoadingClients.value = true;
     setLastError("");
     try {
@@ -1559,7 +1527,6 @@ export const useDataStore = defineStore("data", () => {
   }
 
   async function fetchFoods({ force = false } = {}) {
-    if (foods.value.length && !force) return foods.value;
     isLoadingFoods.value = true;
     setLastError("");
     try {
@@ -1576,7 +1543,6 @@ export const useDataStore = defineStore("data", () => {
   }
 
   async function fetchMeals({ force = false } = {}) {
-    if (meals.value.length && !force) return meals.value;
     isLoadingMeals.value = true;
     setLastError("");
     try {
@@ -1705,7 +1671,6 @@ export const useDataStore = defineStore("data", () => {
   }
 
   async function fetchRecipes({ force = false } = {}) {
-    if (recipes.value.length && !force) return recipes.value;
     isLoadingRecipes.value = true;
     setLastError("");
     try {
@@ -1986,36 +1951,59 @@ export const useDataStore = defineStore("data", () => {
   //  RETURN API
   // ---------------------------------------------------------------------------
   return {
+    // collections
     clients,
     foods,
     meals,
     recipes,
-    clients,
-    getItemDetails,
-    calculateItemMacros,
+
+    // loading flags + errors
+    isLoadingClients,
+    isLoadingFoods,
+    isLoadingMeals,
+    isLoadingRecipes,
+    lastError,
+
+    // fetch + CRUD
+    fetchClients,
+    createClient,
+    updateClient,
+    deleteClient,
+    fetchFoods,
+    createFood,
+    updateFood,
+    deleteFood,
+    fetchMeals,
+    createMealTemplate,
+    updateMealTemplate,
+    deleteMealTemplate,
+    fetchRecipes,
+    createRecipe,
+    updateRecipe,
+    deleteRecipe,
+
+    // programs
     getProgramByClientId,
     updateProgram,
-    recalcDayTotals,
-    calcMealTotals,
-    recalcMealTotals,
-    recalcDayTotals,
-    // program manipulation
-    getProgramByClientId,
-    updateProgram,
-    createMeal,
-    createMealItem,
     addMealToDay,
     removeMealFromDay,
     updateMeal,
-    attachItemToMeal,
-    removeItemFromMeal,
-    duplicateMealItems,
     ensureProgramIncludesDate,
+
+    // calculators/utils
+    getItemDetails,
+    calculateItemMacros,
+    calcMealTotals,
+    recalcMealTotals,
+    recalcDayTotals,
+
     // clipboard
     mealClipboard,
     setMealClipboard,
     clearMealClipboard,
     cloneMeal,
+
+    // misc
     resetAll,
   };
 });

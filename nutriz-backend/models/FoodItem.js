@@ -10,7 +10,6 @@ const FoodItemSchema = new mongoose.Schema({
     name: {
         type: String,
         required: [true, 'Please add a food item name'],
-        unique: true, // Food item names should be unique for easy reference
         trim: true
     },
     category: {
@@ -35,5 +34,8 @@ const FoodItemSchema = new mongoose.Schema({
         default: Date.now
     }
 });
+
+// Ensure uniqueness per nutritionist + name (not globally)
+FoodItemSchema.index({ nutritionist: 1, name: 1 }, { unique: true });
 
 module.exports = mongoose.models.FoodItem || mongoose.model('FoodItem', FoodItemSchema);

@@ -293,7 +293,23 @@ import { storeToRefs } from "pinia";
 
 // --- Get Data from the Store ---
 const dataStore = useDataStore();
-const { clients } = storeToRefs(dataStore);
+const { clients, isLoadingClients, lastError } = storeToRefs(dataStore);
+
+onMounted(async () => {
+  if (!clients.value.length) {
+    try {
+      await dataStore.fetchClients();
+    } catch (e) {
+      // surfaced via lastError
+    }
+  }
+});
+
+function formatDate(value) {
+  if (!value) return "—";
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleDateString();
+}
 
 // --- Helpers ---
 function toLocalISODate(date) {
@@ -633,14 +649,31 @@ async function saveClient() {
     return;
   }
 
-  const normalized = normalizeClientPayload(editedItem.value, {
-    newClient: editedIndex.value === -1,
-  });
+  const payload = {
+    name: editedItem.value.name,
+    dob: editedItem.value.dob || null,
+    contact: {
+      email: editedItem.value.email || "",
+      phone: editedItem.value.phone || "",
+    },
+    goals: Array.isArray(editedItem.value.goals)
+      ? editedItem.value.goals.map((g) => String(g || "").trim()).filter(Boolean)
+      : [],
+    notes: editedItem.value.notes || "",
+  };
+  if (!payload.contact.email) delete payload.contact.email;
+  if (!payload.contact.phone) delete payload.contact.phone;
+  if (Object.keys(payload.contact).length === 0) delete payload.contact;
 
-  if (editedIndex.value > -1) {
-    Object.assign(clients.value[editedIndex.value], normalized);
-  } else {
-    clients.value.unshift(normalized);
+  try {
+    if (editedItem.value?.id) {
+      await dataStore.updateClient(editedItem.value.id, payload);
+    } else {
+      await dataStore.createClient(payload);
+    }
+    closeDialog();
+  } catch (error) {
+    // error displayed via lastError
   }
 }
 
