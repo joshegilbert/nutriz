@@ -17,6 +17,15 @@ const ClientSchema = new mongoose.Schema({
         type: Date,
         required: [true, 'Please add a date of birth']
     },
+    status: {
+        type: String,
+        enum: ['Active', 'Pending', 'On Hold', 'Inactive'],
+        default: 'Active'
+    },
+    gender: { type: String },
+    weight: { type: Number },
+    state: { type: String },
+    lastActive: { type: Date },
     contact: {
         email: {
             type: String,

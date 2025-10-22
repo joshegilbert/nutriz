@@ -887,7 +887,9 @@ export const useDataStore = defineStore("data", () => {
       ? toLocalISODate(new Date(document.dob))
       : existing.dob || "";
 
-    const createdIso = document?.createdAt
+    const createdIso = document?.lastActive
+      ? toLocalISODate(new Date(document.lastActive))
+      : document?.createdAt
       ? toLocalISODate(new Date(document.createdAt))
       : existing.last_active || toLocalISODate(new Date());
 
@@ -900,10 +902,13 @@ export const useDataStore = defineStore("data", () => {
     return {
       id,
       name: document?.name ?? existing.name ?? "",
-      status: existing.status || "Active",
+      status: document?.status ?? existing.status ?? "Active",
       email: document?.contact?.email ?? existing.email ?? "",
       phone: document?.contact?.phone ?? existing.phone ?? "",
       dob: dobIso,
+      gender: document?.gender ?? existing.gender ?? "",
+      weight: document?.weight ?? existing.weight ?? null,
+      state: document?.state ?? existing.state ?? "",
       goals: document?.goals ?? existing.goals ?? [],
       notes: document?.notes ?? existing.notes ?? "",
       last_active: createdIso,
@@ -916,6 +921,11 @@ export const useDataStore = defineStore("data", () => {
     const body = {
       name: payload.name,
       dob: payload.dob || null,
+      status: payload.status || undefined,
+      gender: payload.gender || undefined,
+      weight: payload.weight ?? undefined,
+      state: payload.state || undefined,
+      lastActive: payload.last_active || payload.lastActive || undefined,
       contact: {
         email: payload.email || "",
         phone: payload.phone || "",
@@ -927,6 +937,11 @@ export const useDataStore = defineStore("data", () => {
     if (!body.contact.phone) delete body.contact.phone;
     if (!body.contact.email) delete body.contact.email;
     if (!Object.keys(body.contact).length) delete body.contact;
+
+    // Remove undefined optional fields to avoid overwriting
+    Object.keys(body).forEach((k) => {
+      if (body[k] === undefined) delete body[k];
+    });
 
     return body;
   }
@@ -1989,6 +2004,7 @@ export const useDataStore = defineStore("data", () => {
     removeMealFromDay,
     updateMeal,
     ensureProgramIncludesDate,
+    createMeal,
 
     // calculators/utils
     getItemDetails,

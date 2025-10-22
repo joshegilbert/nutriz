@@ -1,115 +1,49 @@
 <template>
   <v-card class="day-summary elevation-2 rounded-lg pa-4 mt-6">
-    <!-- Header -->
     <v-card-title class="text-h6 font-weight-medium">
       Daily Totals
-      <v-spacer></v-spacer>
-
-      <!-- Reset button -->
-      <v-btn
-        v-if="macrosSource === 'overridden'"
-        icon="mdi-restore"
-        variant="text"
-        size="small"
-        color="primary"
-        @click="resetToAuto"
-        title="Reset to auto-calculated totals"
-      />
     </v-card-title>
 
     <v-divider class="my-2" />
 
-    <!-- Totals -->
     <v-row dense>
       <v-col cols="6" sm="3">
-        <v-text-field
-          v-model.number="editableMacros.calories"
-          label="Calories"
-          type="number"
-          density="compact"
-          hide-details
-          @change="emitManualUpdate"
-        />
+        <div class="metric">
+          <div class="label">Calories</div>
+          <div class="value">{{ macros.calories }}</div>
+        </div>
       </v-col>
-
       <v-col cols="6" sm="3">
-        <v-text-field
-          v-model.number="editableMacros.protein"
-          label="Protein (g)"
-          type="number"
-          density="compact"
-          hide-details
-          @change="emitManualUpdate"
-        />
+        <div class="metric">
+          <div class="label">Protein</div>
+          <div class="value">{{ macros.protein }} g</div>
+        </div>
       </v-col>
-
       <v-col cols="6" sm="3">
-        <v-text-field
-          v-model.number="editableMacros.carbs"
-          label="Carbs (g)"
-          type="number"
-          density="compact"
-          hide-details
-          @change="emitManualUpdate"
-        />
+        <div class="metric">
+          <div class="label">Carbs</div>
+          <div class="value">{{ macros.carbs }} g</div>
+        </div>
       </v-col>
-
       <v-col cols="6" sm="3">
-        <v-text-field
-          v-model.number="editableMacros.fat"
-          label="Fat (g)"
-          type="number"
-          density="compact"
-          hide-details
-          @change="emitManualUpdate"
-        />
+        <div class="metric">
+          <div class="label">Fat</div>
+          <div class="value">{{ macros.fat }} g</div>
+        </div>
       </v-col>
     </v-row>
   </v-card>
-</template>
+ </template>
 
 <script setup>
-import { ref, watch, computed } from "vue";
+import { computed } from "vue";
 
 const props = defineProps({
   day: { type: Object, required: true },
 });
 
-const emit = defineEmits(["updateDay"]);
-
-// Make editable copy of macros
-const editableMacros = ref({ ...props.day.macros });
-const macrosSource = ref(props.day.macrosSource || "auto");
-
-// Watch for parent changes (sync down)
-watch(
-  () => props.day.macros,
-  (newMacros) => {
-    editableMacros.value = { ...newMacros };
-    macrosSource.value = props.day.macrosSource || "auto";
-  },
-  { deep: true }
-);
-
-// When user manually changes a field
-function emitManualUpdate() {
-  macrosSource.value = "overridden";
-  const updatedDay = {
-    ...props.day,
-    macros: { ...editableMacros.value },
-    macrosSource: "overridden",
-  };
-  emit("updateDay", updatedDay);
-}
-
-// Reset to auto-calculated totals
-function resetToAuto() {
-  const updatedDay = {
-    ...props.day,
-    macrosSource: "auto",
-  };
-  emit("updateDay", updatedDay);
-}
+// Read-only totals; DayEditor/Store handle recalculation
+const macros = computed(() => props.day?.macros || { calories: 0, protein: 0, carbs: 0, fat: 0 });
 </script>
 
 <style scoped>
@@ -117,8 +51,14 @@ function resetToAuto() {
   background: #fafafa;
 }
 
-.v-text-field {
-  font-size: 0.9rem;
+.metric .label {
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.metric .value {
+  font-weight: 600;
+  font-size: 1.05rem;
 }
 
 .v-card-title {

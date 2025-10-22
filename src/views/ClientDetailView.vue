@@ -675,6 +675,29 @@ const contactInfo = computed(() => {
   };
 });
 
+// Personal info (safe defaults)
+function calculateAgeFromDob(dobIso) {
+  if (!dobIso) return null;
+  const d = new Date(dobIso);
+  if (Number.isNaN(d.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - d.getFullYear();
+  const m = today.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < d.getDate())) age--;
+  return Math.max(0, age);
+}
+
+const personalInfo = computed(() => {
+  const c = client.value || {};
+  const age = calculateAgeFromDob(c.dob);
+  return {
+    age: age ?? "Not set",
+    gender: c.gender || "Not set",
+    weight: c.weight ? `${c.weight} lbs` : "Not set",
+    state: c.state || "Not set",
+  };
+});
+
 // Program detail labels for the About dialog
 const primaryProgram = activeProgram;
 const programStartLabel = computed(() => primaryProgram.value?.startDate || "Not set");
@@ -883,6 +906,12 @@ async function saveEdit() {
     case "status": {
       target.status = editModel.value.status || target.status;
       target.last_active = editModel.value.lastActive || target.last_active || toLocalISODate(new Date());
+      try {
+        await dataStore.updateClient(target.id, {
+          status: target.status,
+          last_active: target.last_active,
+        });
+      } catch (e) {}
       break;
     }
     case "program": {
@@ -936,11 +965,24 @@ async function saveEdit() {
 
       target.gender = editModel.value.gender || "";
       target.state = editModel.value.state || "";
+      try {
+        await dataStore.updateClient(target.id, {
+          gender: target.gender,
+          weight: target.weight,
+          state: target.state,
+        });
+      } catch (e) {}
       break;
     }
     case "contact": {
       target.email = editModel.value.email?.trim() || "";
       target.phone = editModel.value.phone?.trim() || "";
+      try {
+        await dataStore.updateClient(target.id, {
+          email: target.email,
+          phone: target.phone,
+        });
+      } catch (e) {}
       break;
     }
     case "goals": {
@@ -948,6 +990,11 @@ async function saveEdit() {
         ? editModel.value.goals.map((goal) => (goal || "").trim()).filter(Boolean)
         : [];
       target.goals = goals;
+      try {
+        await dataStore.updateClient(target.id, {
+          goals: target.goals,
+        });
+      } catch (e) {}
       break;
     }
     default:

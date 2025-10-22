@@ -90,6 +90,14 @@
                     :rules="[rules.required, rules.email]"
                   />
                 </v-col>
+                <v-col cols="12" sm="6">
+                  <v-text-field
+                    v-model="editedItem.dob"
+                    label="Date of Birth*"
+                    type="date"
+                    :rules="[rules.required]"
+                  />
+                </v-col>
                 <v-col cols="12">
                   <v-textarea
                     v-model="editedItem.notes"
@@ -369,6 +377,7 @@ function cloneClientForEdit(client) {
   base.id = base.id ?? generateClientId();
   base.name = base.name ?? "";
   base.email = base.email ?? "";
+  base.dob = base.dob ?? "";
   base.status = base.status ?? "Pending";
   base.last_active = base.last_active ?? nowIso;
   base.age = base.age ?? null;
@@ -652,6 +661,8 @@ async function saveClient() {
   const payload = {
     name: editedItem.value.name,
     dob: editedItem.value.dob || null,
+    status: editedItem.value.status || undefined,
+    last_active: editedItem.value.last_active || undefined,
     contact: {
       email: editedItem.value.email || "",
       phone: editedItem.value.phone || "",
@@ -666,10 +677,25 @@ async function saveClient() {
   if (Object.keys(payload.contact).length === 0) delete payload.contact;
 
   try {
-    if (editedItem.value?.id) {
-      await dataStore.updateClient(editedItem.value.id, payload);
+    const isNew = editedIndex.value === -1 || !clients.value.some((c) => c.id === editedItem.value.id);
+    let savedClient;
+    if (isNew) {
+      savedClient = await dataStore.createClient(payload);
+      // Set initial program using chosen start/length
+      const start = editedItem.value.programStart;
+      const length = Number(editedItem.value.programLength);
+      if (start && Number.isInteger(length) && length > 0) {
+        const program = await dataStore.getProgramByClientId(savedClient.id);
+        if (program) {
+          const fresh = createDefaultProgram(savedClient.id, { startDate: start, length });
+          program.startDate = start;
+          program.length = length;
+          program.days = fresh.days;
+          await dataStore.updateProgram(program);
+        }
+      }
     } else {
-      await dataStore.createClient(payload);
+      savedClient = await dataStore.updateClient(editedItem.value.id, payload);
     }
     closeDialog();
   } catch (error) {
