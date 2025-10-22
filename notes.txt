@@ -1,16 +1,65 @@
-Backend setup:
-  cd nutriz-backend
-  npm install
-  # Create .env with at least MONGO_URI and JWT_SECRET
-  npm run start
+Nutriz Project Cheat Sheet (Beginner Friendly)
 
-starting a server for frontend: 
-    npm run dev
+Project layout:
+- Backend API: `nutriz-backend/`
+- Frontend app (Vite): project root (`/`)
 
-For github actions:
+One‑time setup (per computer):
+1) Install Node.js LTS from nodejs.org
+2) Clone the repo from GitHub:
+   - Copy the repo URL from GitHub
+   - In Terminal: `git clone <REPO_URL>` then `cd nutriz`
 
-git add .
+Daily flow (pull latest work):
+- `git pull`
 
-git commit -m "commit message"
+Run the backend (API):
+1) `cd nutriz-backend`
+2) `npm install`
+3) Create `.env` file (in `nutriz-backend/`) with at least:
+   - `MONGO_URI=` (ask Josh if unsure)
+   - `JWT_SECRET=` (any strong string for local is fine)
+   - `PORT=5001` (or leave as default)
+   - `FRONTEND_URL=http://localhost:5173`
+4) Start: `npm start` (or `node server.js`)
+   - Health check: open `http://localhost:5001/api/health`
 
-git push
+Run the frontend (web app):
+1) From project root (not backend): `npm install`
+2) Start dev server: `npm run dev`
+3) Open the printed URL (usually `http://localhost:5173`)
+
+Basic Git commands (safe to use):
+- See what changed: `git status`
+- Save all changes: `git add .`
+- Make a snapshot with a message: `git commit -m "your message"`
+- Upload your commits: `git push`
+- Get latest from GitHub: `git pull`
+
+Typical contribution flow:
+1) Make sure you’re up to date: `git pull`
+2) Do your work and save files
+3) Check your changes: `git status`
+4) Stage and commit: `git add . && git commit -m "Describe what you changed"`
+5) Push to GitHub: `git push`
+
+Common fixes / tips:
+- If `npm start` fails in backend, double‑check `.env` values.
+- If CORS errors appear in the browser, ensure backend `FRONTEND_URL` is `http://localhost:5173` and backend is running.
+- If ports are in use, change `PORT` in backend `.env` and restart.
+
+Useful scripts:
+- Backend tests: `cd nutriz-backend && npm test`
+- Seed sample data: `cd nutriz-backend && node scripts/seedSampleData.js`
+
+Need help? Ask in chat:
+- Which OS are you on (Mac/Windows)?
+- Do you have Node.js installed? `node -v`
+- Do you need the `.env` values for local use?
+
+Glossary (plain English):
+- Repository (repo): The project folder stored on GitHub.
+- Clone: Make a local copy of the repo on your computer.
+- Pull: Download latest changes from GitHub.
+- Commit: Save a snapshot of your changes with a message.
+- Push: Upload your commits to GitHub.
