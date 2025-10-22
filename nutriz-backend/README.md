@@ -62,6 +62,22 @@ To get the backend running locally:
     ```
     The Vitest-powered integration tests will exercise the recipe and meal program APIs. If MongoDB binaries are unavailable (such as in restricted CI environments) the suites skip automatically so builds still complete.
 
+### Deploying to Render
+
+When creating a Web Service on Render:
+
+* Set the **Root Directory** to `nutriz-backend` so builds execute in the backend workspace.
+* Keep the **Build Command** as `npm install`.
+* Use a **Start Command** of `npm start` (or `node server.js`) — both commands rely on the same Express entry point.
+* Provide the following environment variables in the Render dashboard:
+  * `MONGO_URI`
+  * `JWT_SECRET`
+  * `FRONTEND_URL`
+  * `ALLOWED_ORIGINS` (comma-separated list for any additional origins you want to allow)
+  * `PORT` (Render injects `PORT` automatically, but keeping it defined locally helps mirror production.)
+
+After deploying you can confirm the service is healthy by visiting `https://<your-app>.onrender.com/api/health`, which returns `{ "status": "ok" }` when the server, database connection, and routing layer are reachable.
+
 ---
 
 ## 2. Folder Structure
