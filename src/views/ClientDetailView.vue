@@ -1,8 +1,7 @@
 <template>
-  <!-- Make the container fluid and give more horizontal padding -->
-  <v-container fluid class="client-detail-view px-8 py-4">
+  <v-container class="py-6">
     <div v-if="!client">
-      <p>Loading client details...</p>
+      <v-progress-circular indeterminate color="primary"></v-progress-circular>
     </div>
     <div v-else>
       <div class="client-header mb-3">
@@ -401,23 +400,23 @@
   </v-container>
 </template>
 
-
 <script setup>
 import { ref, computed, defineAsyncComponent, nextTick } from "vue";
 import { useRoute } from "vue-router";
-import { useDataStore } from "@/stores/useDataStore";
+import { MEAL_TIMES, useDataStore } from "@/stores/useDataStore";
 import { storeToRefs } from "pinia";
-
-const MealCalendar = defineAsyncComponent(() =>
-  import("@/components/MealCalendar/index.vue")   
-);
-const MealCalendarMonth = defineAsyncComponent(() =>
-  import("@/components/MealCalendarMonth.vue")
-);
+import {
+  addDays,
+  differenceInCalendarDays,
+  format,
+  isSameDay,
+  parseISO,
+  startOfToday,
+} from "date-fns";
 
 const route = useRoute();
 const dataStore = useDataStore();
-const { clients } = storeToRefs(dataStore);
+const { clients, programs } = storeToRefs(dataStore);
 
 const viewMode = ref("week");
 const aboutDialog = ref(false);
@@ -500,51 +499,125 @@ const formRules = {
 };
 
 const client = computed(() =>
-  clients.value.find((c) => c.id === Number(route.params.id))
+  clients.value.find((c) => String(c.id) === route.params.id)
 );
 
-const primaryProgram = computed(() => client.value?.programs?.[0] ?? null);
+const activeProgram = computed(() => client.value?.programs?.[0] ?? null);
+const activeProgramId = computed(() => activeProgram.value?.id ?? null);
 
-const programStartLabel = computed(() => {
-  const start = primaryProgram.value?.startDate;
-  if (!start) return "Not set";
-  const parsed = new Date(start);
-  const time = parsed.getTime();
-  if (Number.isNaN(time)) return start;
-  return parsed.toLocaleDateString();
+const enrichedProgramDays = computed(() => {
+  if (!activeProgram.value?.days) return [];
+  return activeProgram.value.days
+    .map(enrichProgramDay)
+    .filter(Boolean)
+    .sort((a, b) => a.dateObj - b.dateObj);
 });
 
-const programLengthLabel = computed(() => {
-  const length = primaryProgram.value?.length;
-  if (!length) return "Not set";
-  return `${length} day${length === 1 ? "" : "s"}`;
+const hasActiveProgram = computed(() => Boolean(activeProgram.value));
+
+const scheduledDayCount = computed(() => enrichedProgramDays.value.length);
+
+const totalPlannedCalories = computed(() =>
+  enrichedProgramDays.value.reduce(
+    (acc, day) => acc + day.totals.calories,
+    0
+  )
+);
+
+const averageDailyCalories = computed(() => {
+  if (!scheduledDayCount.value) return null;
+  return Math.round(totalPlannedCalories.value / scheduledDayCount.value);
 });
 
-const programEndLabel = computed(() => {
-  const start = primaryProgram.value?.startDate;
-  const length = primaryProgram.value?.length;
-  if (!start || !length) return "Not set";
-  const parsed = new Date(start);
-  const time = parsed.getTime();
-  if (Number.isNaN(time)) return "Not set";
-  parsed.setDate(parsed.getDate() + length - 1);
-  return parsed.toLocaleDateString();
+const totalPlannedItems = computed(() =>
+  enrichedProgramDays.value.reduce(
+    (acc, day) => acc + day.plannedItemCount,
+    0
+  )
+);
+
+const planLengthDays = computed(() => activeProgram.value?.length ?? null);
+
+const planStartDate = computed(() => {
+  if (activeProgram.value?.startDate) {
+    return parseISO(activeProgram.value.startDate);
+  }
+  return enrichedProgramDays.value[0]?.dateObj ?? null;
 });
 
-const personalInfo = computed(() => {
-  const current = client.value || {};
-  const weight = current.weight;
-  const formattedWeight =
-    typeof weight === "number"
-      ? `${weight} lbs`
-      : weight || "Not provided";
+const planEndDate = computed(() => {
+  if (activeProgram.value?.startDate && planLengthDays.value) {
+    return addDays(parseISO(activeProgram.value.startDate), planLengthDays.value - 1);
+  }
+  const lastDay = enrichedProgramDays.value[enrichedProgramDays.value.length - 1];
+  return lastDay?.dateObj ?? null;
+});
 
-  return {
-    age: current.age ?? "Not provided",
-    gender: current.gender ?? "Not provided",
-    weight: formattedWeight,
-    state: current.state ?? "Not provided",
-  };
+const planDateRange = computed(() => ({
+  start: planStartDate.value,
+  end: planEndDate.value,
+}));
+
+const remainingScheduledDays = computed(() => {
+  const today = startOfToday(new Date());
+  return enrichedProgramDays.value.filter((day) => day.dateObj >= today).length;
+});
+
+const progressPercent = computed(() => {
+  if (!planLengthDays.value) return null;
+  const scheduled = Math.min(scheduledDayCount.value, planLengthDays.value);
+  return Math.round((scheduled / planLengthDays.value) * 100);
+});
+
+const planOverviewStats = computed(() => {
+  const stats = [];
+  if (planLengthDays.value) {
+    stats.push({
+      label: "Program Length",
+      value: `${planLengthDays.value} days`,
+      hint: planDateRange.value.end
+        ? `Ends ${formatDateDisplay(planDateRange.value.end)}`
+        : null,
+    });
+  }
+  stats.push({
+    label: "Days Scheduled",
+    value: scheduledDayCount.value,
+    hint: remainingScheduledDays.value
+      ? `${remainingScheduledDays.value} upcoming`
+      : "No upcoming days",
+  });
+
+  if (averageDailyCalories.value !== null) {
+    stats.push({
+      label: "Avg Daily Calories",
+      value: `${averageDailyCalories.value} cal`,
+    });
+  }
+
+  stats.push({
+    label: "Items Planned",
+    value: totalPlannedItems.value,
+  });
+
+  return stats;
+});
+
+const today = computed(() => startOfToday(new Date()));
+
+const focusDay = computed(() => {
+  if (!enrichedProgramDays.value.length) return null;
+  const todaysPlan = enrichedProgramDays.value.find((day) =>
+    isSameDay(day.dateObj, today.value)
+  );
+  if (todaysPlan) return todaysPlan;
+
+  const upcoming = enrichedProgramDays.value.find(
+    (day) => day.dateObj >= today.value
+  );
+  if (upcoming) return upcoming;
+
+  return enrichedProgramDays.value[enrichedProgramDays.value.length - 1];
 });
 
 const contactInfo = computed(() => {
@@ -569,7 +642,29 @@ const goalList = computed(() => {
   if (typeof goals === "string" && goals.trim().length > 0) {
     return goals.split("\n").map((goal) => goal.trim()).filter(Boolean);
   }
-  return [];
+  const diff = differenceInCalendarDays(focusDay.value.dateObj, today.value);
+  if (diff === 0) {
+    return { descriptor: "Today" };
+  }
+  if (diff === 1) {
+    return { descriptor: "Tomorrow" };
+  }
+  if (diff > 1) {
+    return { descriptor: `In ${diff} days` };
+  }
+  return { descriptor: `${Math.abs(diff)} day(s) ago` };
+});
+
+const upcomingDays = computed(() => {
+  if (!enrichedProgramDays.value.length) return [];
+  const upcoming = enrichedProgramDays.value.filter(
+    (day) => day.dateObj >= today.value
+  );
+  if (upcoming.length) {
+    return upcoming.slice(0, 5);
+  }
+  // If all days are in the past, show the most recent few for quick access
+  return enrichedProgramDays.value.slice(-3);
 });
 
 const editDialogTitle = computed(() => {
@@ -814,6 +909,37 @@ function openWeekView(date) {
   selectedDate.value = new Date(date);
   viewMode.value = "week";
 }
+
+function formatDateDisplay(date) {
+  if (!date) return "";
+  return format(date, "EEE, MMM d");
+}
+
+function formatMonthDay(date) {
+  if (!date) return "";
+  return format(date, "MMM d");
+}
+
+function formatDayTitle(day) {
+  if (!day) return "";
+  const title = format(day.dateObj, "EEEE, MMM d");
+  const diff = differenceInCalendarDays(day.dateObj, today.value);
+  if (diff === 0) return `${title} · Today`;
+  if (diff === 1) return `${title} · Tomorrow`;
+  if (diff > 1) return `${title} · In ${diff} days`;
+  return `${title} · ${Math.abs(diff)} day(s) ago`;
+}
+
+function upcomingDaySubtitle(day) {
+  if (!day) return "";
+  if (!day.plannedItemCount) return "No items planned";
+  return `${day.plannedItemCount} item(s) · ${day.totals.calories} cal`;
+}
+
+function mealSummary(meal) {
+  if (!meal.items.length) return "No items planned";
+  return `${meal.items.length} item(s) · ${meal.totals.calories} cal`;
+}
 </script>
 
 <style scoped>
@@ -822,18 +948,27 @@ function openWeekView(date) {
   min-height: 100vh;
 }
 
-.client-detail-view h1 {
-  font-weight: 600;
+const programsForClient = computed(() =>
+  programs.value.filter((program) => program.clientId === clientId)
+);
+
+function formatDate(value) {
+  if (!value) return "—";
+  return new Date(value).toLocaleDateString();
 }
 
-.v-btn-toggle {
-  background-color: #f5f5f5;
-  border-radius: 8px;
-}
-
-.v-btn-toggle .v-btn--active {
-  background-color: #1976d2;
-  color: white;
+function totalProgramMacros(program) {
+  return program.days?.reduce(
+    (totals, day) => {
+      if (!day?.macros) return totals;
+      totals.calories += day.macros.calories || 0;
+      totals.protein += day.macros.protein || 0;
+      totals.carbs += day.macros.carbs || 0;
+      totals.fat += day.macros.fat || 0;
+      return totals;
+    },
+    { calories: 0, protein: 0, carbs: 0, fat: 0 }
+  ) || { calories: 0, protein: 0, carbs: 0, fat: 0 };
 }
 
 .client-header {
