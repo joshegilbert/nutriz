@@ -27,6 +27,36 @@
       <v-divider></v-divider>
 
       <v-list density="compact" nav>
+        <v-list-item
+          prepend-icon="mdi-account-group"
+          title="Clients"
+          value="clients"
+          to="/clients"
+        ></v-list-item>
+        <v-list-item
+          prepend-icon="mdi-food-apple"
+          title="Foods"
+          value="foods"
+          to="/foods"
+        ></v-list-item>
+        <v-list-item
+          prepend-icon="mdi-silverware"
+          title="Meals"
+          value="meals"
+          to="/meals"
+        ></v-list-item>
+        <v-list-item
+          prepend-icon="mdi-receipt-text"
+          title="Recipes"
+          value="recipes"
+          to="/recipes"
+        ></v-list-item>
+        <v-list-item
+          prepend-icon="mdi-file-chart"
+          title="Reports"
+          value="reports"
+          to="/reports"
+        ></v-list-item>
         <v-list-item prepend-icon="mdi-view-dashboard" title="Dashboard" value="home" to="/" />
         <v-list-item prepend-icon="mdi-account-group" title="Clients" value="clients" to="/clients" />
         <v-list-item prepend-icon="mdi-food-apple" title="Foods" value="foods" to="/foods" />
