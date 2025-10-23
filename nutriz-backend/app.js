@@ -5,6 +5,7 @@ const foodItemRoutes = require('./routes/foodItemRoutes');
 const clientRoutes = require('./routes/clientRoutes');
 const recipeRoutes = require('./routes/recipeRoutes');
 const programRoutes = require('./routes/programRoutes');
+const templateRoutes = require('./routes/templateRoutes');
 const { errorHandler } = require('./middleware/errorMiddleware');
 
 const app = express();
@@ -19,6 +20,7 @@ app.use('/api/fooditems', foodItemRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/recipes', recipeRoutes);
 app.use('/api/programs', programRoutes);
+app.use('/api/templates', templateRoutes);
 
 app.get('/', (req, res) => {
     res.send('API is running...');

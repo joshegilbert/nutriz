@@ -57,6 +57,16 @@
                       </v-list-item-subtitle>
                     </v-list-item>
                   </v-list>
+                  <div v-if="selectedItem?.type === 'food'" class="mt-2">
+                    <v-select
+                      v-model="selectedServing"
+                      :items="(store.getItemDetails('food', selectedItem?.id)?.servings || []).map(s => s.label)"
+                      label="Serving"
+                      density="compact"
+                      clearable
+                      hide-details
+                    />
+                  </div>
                 </v-window-item>
 
                 <!-- RECIPE TAB -->
@@ -207,6 +217,7 @@ const localModel = computed({
 const selectedTab = ref("food");
 const searchQuery = ref("");
 const selectedItem = ref(null);
+const selectedServing = ref('');
 const customName = ref("");
 const quantity = ref(1);
 const showOverrides = ref(false);
@@ -228,6 +239,12 @@ const isValid = computed(() => {
   );
 });
 
+watch(selectedServing, () => {
+  if (!selectedItem.value || selectedItem.value.type !== 'food' || showOverrides.value) return;
+  const food = store.getItemDetails('food', selectedItem.value.id);
+  macros.value = calcFoodMacros(food, quantity.value || 1, selectedServing.value);
+});
+
 function getLibraryMacros(type, entity) {
   if (!entity) return { calories: 0, protein: 0, carbs: 0, fat: 0 };
   return store.calculateItemMacros(type, entity.id, 1);
@@ -241,20 +258,25 @@ function selectItem(item, type) {
     macros.value = { calories: 0, protein: 0, carbs: 0, fat: 0 };
     return;
   }
-  macros.value = store.calculateItemMacros(
-    type,
-    item.id,
-    quantity.value || 1
-  );
+  if (type === 'food') {
+    // default serving selection
+    const food = store.getItemDetails('food', item.id);
+    const list = (food?.servings || []).map((s) => s.label).filter(Boolean);
+    selectedServing.value = list[0] || '';
+    macros.value = calcFoodMacros(food, quantity.value || 1, selectedServing.value);
+  } else {
+    macros.value = store.calculateItemMacros(type, item.id, quantity.value || 1);
+  }
 }
 
 watch(quantity, () => {
   if (!selectedItem.value || showOverrides.value) return;
-  macros.value = store.calculateItemMacros(
-    selectedItem.value.type,
-    selectedItem.value.id,
-    quantity.value || 1
-  );
+  if (selectedItem.value.type === 'food') {
+    const food = store.getItemDetails('food', selectedItem.value.id);
+    macros.value = calcFoodMacros(food, quantity.value || 1, selectedServing.value);
+  } else {
+    macros.value = store.calculateItemMacros(selectedItem.value.type, selectedItem.value.id, quantity.value || 1);
+  }
 });
 watch(showOverrides, (next) => {
   if (!next && selectedItem.value && selectedItem.value.type !== "custom") {
@@ -277,7 +299,7 @@ function handleAddItem() {
     sourceId: isCustom ? null : itemRecord?.id ?? null,
     name: isCustom ? customName.value.trim() : itemRecord?.name,
     amount: quantity.value,
-    unit: resolveUnit(isCustom ? null : itemRecord),
+    unit: type === 'food' ? (selectedServing.value || resolveUnit(itemRecord)) : resolveUnit(isCustom ? null : itemRecord),
     notes: "",
     macros: { ...macros.value },
     macrosSource: showOverrides.value || isCustom ? "overridden" : "auto",
@@ -295,6 +317,29 @@ function resolveUnit(item) {
   if (item.servingUnit) return item.servingUnit;
   if (item.defaultServingSize) return item.defaultServingSize;
   return "";
+}
+
+function calcFoodMacros(food, amount, unitLabel) {
+  if (!food) return { calories: 0, protein: 0, carbs: 0, fat: 0 };
+  if (unitLabel && (food.servings || []).length && (food.gramsPerServing || 0) > 0) {
+    const perGram = {
+      calories: (food.macrosPerServing.calories || 0) / food.gramsPerServing,
+      protein: (food.macrosPerServing.protein || 0) / food.gramsPerServing,
+      carbs: (food.macrosPerServing.carbs || 0) / food.gramsPerServing,
+      fat: (food.macrosPerServing.fat || 0) / food.gramsPerServing,
+    };
+    const target = (food.servings || []).find((s) => s.label === unitLabel);
+    if (target && target.grams > 0) {
+      const gramsTotal = target.grams * (amount || 1);
+      return {
+        calories: perGram.calories * gramsTotal,
+        protein: perGram.protein * gramsTotal,
+        carbs: perGram.carbs * gramsTotal,
+        fat: perGram.fat * gramsTotal,
+      };
+    }
+  }
+  return store.calculateItemMacros('food', food.id, amount || 1);
 }
 
 function closeDialog() {

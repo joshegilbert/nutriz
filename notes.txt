@@ -4,11 +4,7 @@ Project layout:
 - Backend API: `nutriz-backend/`
 - Frontend app (Vite): project root (`/`)
 
-One‑time setup (per computer):
-1) Install Node.js LTS from nodejs.org
-2) Clone the repo from GitHub:
-   - Copy the repo URL from GitHub
-   - In Terminal: `git clone <REPO_URL>` then `cd nutriz`
+
 
 Daily flow (pull latest work):
 - `git pull`
@@ -51,11 +47,6 @@ Common fixes / tips:
 Useful scripts:
 - Backend tests: `cd nutriz-backend && npm test`
 - Seed sample data: `cd nutriz-backend && node scripts/seedSampleData.js`
-
-Need help? Ask in chat:
-- Which OS are you on (Mac/Windows)?
-- Do you have Node.js installed? `node -v`
-- Do you need the `.env` values for local use?
 
 Glossary (plain English):
 - Repository (repo): The project folder stored on GitHub.

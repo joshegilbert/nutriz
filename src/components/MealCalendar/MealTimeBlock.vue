@@ -247,11 +247,41 @@ function removeItem(itemId) {
 
 function onAmountChange(item) {
   if (item.macrosSource === "overridden") return;
-  item.macros = store.calculateItemMacros(
-    item.type,
-    item.sourceId,
-    item.amount || 1
-  );
+  if (item.type === 'food') {
+    const food = store.getItemDetails('food', item.sourceId);
+    if (food) {
+      const unit = item.unit || null;
+      const amount = item.amount || 1;
+      if (unit && food.gramsPerServing > 0) {
+        const perGram = {
+          calories: (food.macrosPerServing.calories || 0) / food.gramsPerServing,
+          protein: (food.macrosPerServing.protein || 0) / food.gramsPerServing,
+          carbs: (food.macrosPerServing.carbs || 0) / food.gramsPerServing,
+          fat: (food.macrosPerServing.fat || 0) / food.gramsPerServing,
+        };
+        const found = (food.servings || []).find((s) => s.label === unit);
+        if (found && found.grams > 0) {
+          const gramsTotal = found.grams * amount;
+          item.macros = {
+            calories: perGram.calories * gramsTotal,
+            protein: perGram.protein * gramsTotal,
+            carbs: perGram.carbs * gramsTotal,
+            fat: perGram.fat * gramsTotal,
+          };
+        } else {
+          item.macros = store.calculateItemMacros('food', item.sourceId, amount);
+        }
+      } else {
+        item.macros = store.calculateItemMacros('food', item.sourceId, amount);
+      }
+    }
+  } else {
+    item.macros = store.calculateItemMacros(
+      item.type,
+      item.sourceId,
+      item.amount || 1
+    );
+  }
   syncMeal();
 }
 

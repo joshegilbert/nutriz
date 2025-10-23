@@ -8,6 +8,7 @@ const clientRoutes = require('./routes/clientRoutes');     // Import client rout
 const recipeRoutes = require('./routes/recipeRoutes');     // Import recipe routes
 const mealRoutes = require('./routes/mealRoutes');         // Import meal routes
 const programRoutes = require('./routes/programRoutes');   // Import program routes
+const templateRoutes = require('./routes/templateRoutes'); // Import template routes
 const { errorHandler } = require('./middleware/errorMiddleware');
 
 // Load env vars
@@ -67,6 +68,7 @@ app.use('/api/clients', clientRoutes);     // Client routes
 app.use('/api/recipes', recipeRoutes);     // Recipe routes
 app.use('/api/meals', mealRoutes);         // Meal routes
 app.use('/api/programs', programRoutes);   // Program routes
+app.use('/api/templates', templateRoutes); // Template routes
 
 // Basic route
 app.get('/', (req, res) => {

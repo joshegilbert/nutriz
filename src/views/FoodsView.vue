@@ -37,25 +37,51 @@
       </v-card-text>
     </v-card>
 
-    <v-dialog v-model="dialog" max-width="600px">
+    <v-dialog v-model="dialog" :key="dialogKey" max-width="620px" @keydown.esc="onCancel">
       <v-card>
         <v-card-title class="text-h5">{{ formTitle }}</v-card-title>
         <v-card-text>
           <v-form ref="form">
             <v-text-field v-model="editedItem.name" label="Food Name*" :rules="[rules.required]" />
             <v-select v-model="editedItem.category" :items="categories" label="Category*" :rules="[rules.required]" />
-            <v-text-field v-model="editedItem.defaultServingSize" label="Default Serving Size*" :rules="[rules.required]" />
+            <v-row>
+              <v-col cols="12" md="7">
+                <v-text-field v-model="editedItem.defaultServingSize" :disabled="per100g" label="Default Serving Size*" :rules="[rules.required]" />
+              </v-col>
+              <v-col cols="12" md="5">
+                <v-text-field v-model.number="editedItem.gramsPerServing" :disabled="per100g" label="Grams per Default Serving" type="number" hint="Used to convert to other serving units" persistent-hint />
+              </v-col>
+            </v-row>
+            <v-switch v-model="per100g" inset label="Define macros per 100 g" hide-details density="comfortable" />
             <v-row>
               <v-col cols="6" sm="3"><v-text-field v-model.number="editedItem.caloriesPerServing" label="Calories*" type="number" :rules="[rules.required]" /></v-col>
               <v-col cols="6" sm="3"><v-text-field v-model.number="editedItem.proteinPerServing" label="Protein*" suffix="g" type="number" :rules="[rules.required]" /></v-col>
               <v-col cols="6" sm="3"><v-text-field v-model.number="editedItem.carbsPerServing" label="Carbs*" suffix="g" type="number" :rules="[rules.required]" /></v-col>
               <v-col cols="6" sm="3"><v-text-field v-model.number="editedItem.fatPerServing" label="Fat*" suffix="g" type="number" :rules="[rules.required]" /></v-col>
             </v-row>
+            <v-divider class="my-2" />
+            <p class="text-subtitle-2 mb-2">Additional Serving Sizes</p>
+            <v-row v-for="(s, i) in editedItem.servings" :key="`serv-${i}`" align="center">
+              <v-col cols="7">
+                <v-text-field v-model="editedItem.servings[i].label" label="Label (e.g., 1 oz, 1 cup)" density="compact" hide-details />
+              </v-col>
+              <v-col cols="4">
+                <v-text-field v-model.number="editedItem.servings[i].grams" label="Grams" type="number" density="compact" hide-details />
+              </v-col>
+              <v-col cols="1" class="text-right">
+                <v-btn icon="mdi-delete" variant="text" @click="removeServing(i)" />
+              </v-col>
+            </v-row>
+            <div class="mt-1 d-flex align-center" style="gap:8px;">
+              <v-btn size="small" variant="tonal" color="primary" prepend-icon="mdi-plus" @click="addServing">Add Serving</v-btn>
+              <v-btn size="x-small" variant="text" @click="addCommonServing('1 oz', 28.35)">+ 1 oz</v-btn>
+              <v-btn size="x-small" variant="text" @click="addCommonServing('100 g', 100)">+ 100 g</v-btn>
+            </div>
           </v-form>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="closeDialog" :disabled="isLoadingFoods">Cancel</v-btn>
+          <v-btn variant="text" @click="onCancel">Cancel</v-btn>
           <v-btn variant="text" color="primary" @click="saveFood" :loading="isLoadingFoods">Save</v-btn>
         </v-card-actions>
       </v-card>
@@ -64,7 +90,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, nextTick, watch } from 'vue';
 import { useDataStore } from '@/stores/useDataStore';
 import { storeToRefs } from 'pinia';
 
@@ -72,8 +98,10 @@ const dataStore = useDataStore();
 const { foods, isLoadingFoods, lastError } = storeToRefs(dataStore);
 
 const dialog = ref(false);
+const dialogKey = ref(0);
 const form = ref(null);
 const editedItem = ref(null);
+const per100g = ref(false);
 const search = ref('');
 const selectedCategory = ref('');
 
@@ -120,34 +148,49 @@ function openAddDialog() {
     name: '',
     category: 'Other',
     defaultServingSize: '',
+    gramsPerServing: 0,
     caloriesPerServing: 0,
     proteinPerServing: 0,
     carbsPerServing: 0,
     fatPerServing: 0,
+    servings: [],
   };
+  per100g.value = false;
   dialog.value = true;
 }
 
 function editFood(item) {
-  editedItem.value = JSON.parse(JSON.stringify(item));
+  const copy = JSON.parse(JSON.stringify(item));
+  copy.gramsPerServing = copy.gramsPerServing || 0;
+  copy.servings = Array.isArray(copy.servings) ? copy.servings : [];
+  editedItem.value = copy;
+  per100g.value = (copy.defaultServingSize || '').toLowerCase().includes('100') && Number(copy.gramsPerServing) === 100;
   dialog.value = true;
 }
 
-function closeDialog() {
+function onCancel() {
   dialog.value = false;
-  editedItem.value = null;
+  nextTick(() => {
+    form.value?.resetValidation?.();
+    editedItem.value = null;
+    dialogKey.value++;
+  });
 }
 
 async function saveFood() {
   const { valid } = await form.value.validate();
   if (!valid || !editedItem.value) return;
   try {
+    if (per100g.value) {
+      editedItem.value.defaultServingSize = '100 g';
+      editedItem.value.gramsPerServing = 100;
+    }
     if (editedItem.value.id) {
       await dataStore.updateFood(editedItem.value.id, editedItem.value);
     } else {
       await dataStore.createFood(editedItem.value);
     }
-    closeDialog();
+    onCancel();
   } catch {}
 }
 
@@ -157,8 +200,30 @@ async function removeFood(item) {
     await dataStore.deleteFood(item.id);
   } catch {}
 }
+
+function addServing() {
+  if (!Array.isArray(editedItem.value.servings)) editedItem.value.servings = [];
+  editedItem.value.servings.push({ label: '', grams: 0 });
+}
+function removeServing(index) {
+  if (!Array.isArray(editedItem.value.servings)) return;
+  editedItem.value.servings.splice(index, 1);
+}
+
+function addCommonServing(label, grams) {
+  if (!Array.isArray(editedItem.value.servings)) editedItem.value.servings = [];
+  if (!editedItem.value.servings.some(s => (s.label || '').toLowerCase() === label.toLowerCase())) {
+    editedItem.value.servings.push({ label, grams });
+  }
+}
+
+watch(per100g, (val) => {
+  if (val) {
+    editedItem.value.defaultServingSize = '100 g';
+    editedItem.value.gramsPerServing = 100;
+  }
+});
 </script>
 
 <style scoped>
 </style>
-

@@ -750,6 +750,34 @@ export const useDataStore = defineStore("data", () => {
 
   // Clipboard for meals (copy/paste across the day editor)
   const mealClipboard = ref(null);
+  // Templates storage
+  const dayTemplates = ref([]); // full day (meals + items)
+  const dayLayoutTemplates = ref([]); // layout only (meal names/times)
+
+  const TPL_STORAGE_KEY = "nutriz.templates.v1";
+  function loadTemplatesFromStorage() {
+    try {
+      const raw = localStorage.getItem(TPL_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed.dayTemplates)) dayTemplates.value = parsed.dayTemplates;
+      if (Array.isArray(parsed.dayLayoutTemplates))
+        dayLayoutTemplates.value = parsed.dayLayoutTemplates;
+    } catch (_) {
+      // ignore
+    }
+  }
+  function saveTemplatesToStorage() {
+    try {
+      const payload = {
+        dayTemplates: dayTemplates.value,
+        dayLayoutTemplates: dayLayoutTemplates.value,
+      };
+      localStorage.setItem(TPL_STORAGE_KEY, JSON.stringify(payload));
+    } catch (_) {
+      // ignore
+    }
+  }
 
   function resetAll() {
     foods.value = [];
@@ -762,7 +790,12 @@ export const useDataStore = defineStore("data", () => {
     isLoadingRecipes.value = false;
     lastError.value = "";
     mealClipboard.value = null;
+    dayTemplates.value = [];
+    dayLayoutTemplates.value = [];
   }
+
+  // Load templates on init
+  loadTemplatesFromStorage();
 
   // ---------------------------------------------------------------------------
   //  DATA NORMALISERS
@@ -980,11 +1013,15 @@ export const useDataStore = defineStore("data", () => {
       category: document.category || "Other",
       defaultServingSize: document.defaultServingSize || "1 serving",
       servingUnit: document.defaultServingSize || "1 serving",
+      gramsPerServing: Number(document.gramsPerServing) || 0,
       brand: document.brand || "",
       caloriesPerServing: document.caloriesPerServing || 0,
       proteinPerServing: document.proteinPerServing || 0,
       carbsPerServing: document.carbsPerServing || 0,
       fatPerServing: document.fatPerServing || 0,
+      servings: Array.isArray(document.servings)
+        ? document.servings.map((s) => ({ label: s.label || "", grams: Number(s.grams) || 0 }))
+        : [],
       macrosPerServing: {
         calories: document.caloriesPerServing || 0,
         protein: document.proteinPerServing || 0,
@@ -999,10 +1036,16 @@ export const useDataStore = defineStore("data", () => {
       name: payload.name,
       category: payload.category || "Other",
       defaultServingSize: payload.defaultServingSize || "1 serving",
+      gramsPerServing: Number(payload.gramsPerServing) || 0,
       caloriesPerServing: Number(payload.caloriesPerServing) || 0,
       proteinPerServing: Number(payload.proteinPerServing) || 0,
       carbsPerServing: Number(payload.carbsPerServing) || 0,
       fatPerServing: Number(payload.fatPerServing) || 0,
+      servings: Array.isArray(payload.servings)
+        ? payload.servings
+            .map((s) => ({ label: String(s.label || "").trim(), grams: Number(s.grams) || 0 }))
+            .filter((s) => s.label && s.grams > 0)
+        : [],
     };
   }
 
@@ -1276,6 +1319,31 @@ export const useDataStore = defineStore("data", () => {
     };
   }
 
+  function calcFoodMacrosByUnit(food, amount = 1, unitLabel = null) {
+    if (!food || amount <= 0) return { ...EMPTY_MACROS };
+    // Default: per serving scaling
+    let factor = amount;
+    if (unitLabel && Array.isArray(food.servings) && food.gramsPerServing > 0) {
+      const found = food.servings.find((s) => s.label === unitLabel);
+      if (found && found.grams > 0) {
+        const perGram = {
+          calories: (food.macrosPerServing.calories || 0) / food.gramsPerServing,
+          protein: (food.macrosPerServing.protein || 0) / food.gramsPerServing,
+          carbs: (food.macrosPerServing.carbs || 0) / food.gramsPerServing,
+          fat: (food.macrosPerServing.fat || 0) / food.gramsPerServing,
+        };
+        const gramsTotal = found.grams * amount;
+        return {
+          calories: perGram.calories * gramsTotal,
+          protein: perGram.protein * gramsTotal,
+          carbs: perGram.carbs * gramsTotal,
+          fat: perGram.fat * gramsTotal,
+        };
+      }
+    }
+    return scaleMacros(food.macrosPerServing, factor);
+  }
+
   function scaleMacros(macros, factor) {
     const multiplier = normaliseNumber(factor);
     if (multiplier === 0) {
@@ -1324,7 +1392,8 @@ export const useDataStore = defineStore("data", () => {
     if (foodId != null) {
       const food = getItemDetails("food", foodId);
       if (!food) return { ...EMPTY_MACROS };
-      return scaleMacros(food.macrosPerServing, component.amount ?? 1);
+      const unitLabel = component.unit || null;
+      return calcFoodMacrosByUnit(food, component.amount ?? 1, unitLabel);
     }
 
     return { ...EMPTY_MACROS };
@@ -1441,6 +1510,10 @@ export const useDataStore = defineStore("data", () => {
   // ------------------------------
   //  VARIANTS (A/B day options)
   // ------------------------------
+
+  // ------------------------------
+  //  VARIANTS (A/B day options)
+  // ------------------------------
   function ensureVariant(day, key = "B", { duplicateFrom = "A", label } = {}) {
     if (!day) return;
     if (!Array.isArray(day.variants)) day.variants = [];
@@ -1467,6 +1540,217 @@ export const useDataStore = defineStore("data", () => {
     day.meals = target.meals.map((m) => toMeal(m));
     if (day.macrosSource !== "overridden") {
       recalcDayTotals(day);
+    }
+  }
+
+  function renameVariant(day, key, newLabel) {
+    if (!day || !Array.isArray(day.variants)) return;
+    const target = day.variants.find((v) => v.key === key);
+    if (!target) return;
+    target.label = newLabel || "";
+  }
+
+  function nextVariantKeyFor(day) {
+    const keys = (day?.variants || []).map((v) => String(v.key || "").toUpperCase());
+    let code = "A".charCodeAt(0);
+    while (keys.includes(String.fromCharCode(code))) code++;
+    return String.fromCharCode(code);
+  }
+
+  function duplicateVariant(day, key, newKey) {
+    if (!day || !Array.isArray(day.variants)) return null;
+    const source = day.variants.find((v) => v.key === key) || day.variants[0];
+    if (!source) return null;
+    const keyToUse = newKey || nextVariantKeyFor(day);
+    const copy = {
+      key: keyToUse,
+      label: source.label ? `${source.label} (copy)` : `Option ${keyToUse}`,
+      meals: (source.meals || []).map((m) => toMeal(m)),
+      macros: createMacroTotals(source.macros),
+      macrosSource: source.macrosSource || "auto",
+    };
+    day.variants.push(copy);
+    setActiveVariant(day, keyToUse);
+    return copy;
+  }
+
+  function deleteVariant(day, key) {
+    if (!day || !Array.isArray(day.variants)) return;
+    if (day.variants.length <= 1) return; // keep at least one
+    const idx = day.variants.findIndex((v) => v.key === key);
+    if (idx === -1) return;
+    day.variants.splice(idx, 1);
+    const nextActive = day.variants[0].key;
+    setActiveVariant(day, nextActive);
+  }
+
+  // ------------------------------
+  //  TEMPLATES (Day layout + Day full)
+  // ------------------------------
+  function createTemplateId(prefix = "tpl") {
+    return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  // Backend template sync helpers
+  async function fetchTemplates() {
+    try {
+      const { data } = await api.get('/templates');
+      const days = [];
+      const layouts = [];
+      (data || []).forEach((tpl) => {
+        const base = {
+          id: tpl._id || tpl.id,
+          name: tpl.name || '',
+          tags: Array.isArray(tpl.tags) ? tpl.tags : [],
+          createdAt: new Date(tpl.createdAt || Date.now()).getTime(),
+        };
+        if (tpl.type === 'day') {
+          days.push({ ...base, meals: (tpl.meals || []).map((m) => toMeal(m)) });
+        } else if (tpl.type === 'layout') {
+          layouts.push({ ...base, meals: (tpl.layoutMeals || []).map((lm) => ({ name: lm.name || 'Meal', time: lm.time || '' })) });
+        }
+      });
+      dayTemplates.value = days;
+      dayLayoutTemplates.value = layouts;
+      saveTemplatesToStorage();
+      return { day: days, layout: layouts };
+    } catch (e) {
+      // fallback to localStorage content
+      return { day: dayTemplates.value, layout: dayLayoutTemplates.value };
+    }
+  }
+
+  async function createTemplateOnServer(payload) {
+    const { data } = await api.post('/templates', payload);
+    return data;
+  }
+
+  async function updateTemplateOnServer(id, payload) {
+    const { data } = await api.put(`/templates/${id}`, payload);
+    return data;
+  }
+
+  async function deleteTemplateOnServer(id) {
+    await api.delete(`/templates/${id}`);
+  }
+
+  async function saveDayLayoutTemplateFromDay(day, { name, tags = [] } = {}) {
+    if (!day) return null;
+    const template = {
+      id: createTemplateId("tpl_layout"),
+      name: name || `Layout ${toLocalISODate(new Date())}`,
+      tags: Array.isArray(tags) ? tags : [],
+      meals: (day.meals || []).map((m) => ({ name: m.name || m.mealTime || "Meal", time: m.time || "" })),
+      createdAt: Date.now(),
+    };
+    try {
+      const created = await createTemplateOnServer({
+        type: 'layout',
+        name: template.name,
+        tags: template.tags,
+        layoutMeals: template.meals,
+      });
+      const normalised = { ...template, id: created._id || created.id };
+      dayLayoutTemplates.value = [normalised, ...dayLayoutTemplates.value];
+      saveTemplatesToStorage();
+      return normalised;
+    } catch (e) {
+      // fallback local
+      dayLayoutTemplates.value = [template, ...dayLayoutTemplates.value];
+      saveTemplatesToStorage();
+      return template;
+    }
+  }
+
+  async function saveDayTemplateFromDay(day, { name, tags = [] } = {}) {
+    if (!day) return null;
+    const template = {
+      id: createTemplateId("tpl_day"),
+      name: name || `Day ${toLocalISODate(new Date())}`,
+      tags: Array.isArray(tags) ? tags : [],
+      meals: (day.meals || []).map((m) => toMeal(m)),
+      createdAt: Date.now(),
+    };
+    try {
+      const created = await createTemplateOnServer({
+        type: 'day',
+        name: template.name,
+        tags: template.tags,
+        meals: template.meals,
+      });
+      const normalised = { ...template, id: created._id || created.id };
+      dayTemplates.value = [normalised, ...dayTemplates.value];
+      saveTemplatesToStorage();
+      return normalised;
+    } catch (e) {
+      dayTemplates.value = [template, ...dayTemplates.value];
+      saveTemplatesToStorage();
+      return template;
+    }
+  }
+
+  function applyDayLayoutTemplate(programInstance, dayDate, template, { replace = true } = {}) {
+    if (!programInstance || !dayDate || !template) return;
+    const day = programInstance.days.find((d) => d.date === dayDate);
+    if (!day) return;
+    const layoutMeals = (template.meals || []).map((def) =>
+      toMeal({ name: def.name || "Meal", time: def.time || "", items: [] })
+    );
+    if (replace) {
+      day.meals = layoutMeals;
+    } else {
+      day.meals.push(...layoutMeals);
+    }
+    recalcDayTotals(day);
+  }
+
+  function applyDayTemplate(programInstance, dayDate, template, { replace = true } = {}) {
+    if (!programInstance || !dayDate || !template) return;
+    const day = programInstance.days.find((d) => d.date === dayDate);
+    if (!day) return;
+    const fullMeals = (template.meals || []).map((m) => toMeal(m));
+    if (replace) {
+      day.meals = fullMeals;
+    } else {
+      day.meals.push(...fullMeals);
+    }
+    recalcDayTotals(day);
+  }
+
+  function listTemplates() {
+    return {
+      day: dayTemplates.value,
+      layout: dayLayoutTemplates.value,
+    };
+  }
+
+  async function deleteTemplate(type, id) {
+    if (type === "day") {
+      dayTemplates.value = dayTemplates.value.filter((t) => t.id !== id);
+    } else if (type === "layout") {
+      dayLayoutTemplates.value = dayLayoutTemplates.value.filter((t) => t.id !== id);
+    }
+    try { await deleteTemplateOnServer(id); } catch (e) {}
+    saveTemplatesToStorage();
+  }
+
+  async function renameTemplate(type, id, name) {
+    const list = type === "day" ? dayTemplates.value : dayLayoutTemplates.value;
+    const t = list.find((x) => x.id === id);
+    if (t) {
+      t.name = name || t.name;
+      try { await updateTemplateOnServer(id, { name: t.name }); } catch (e) {}
+      saveTemplatesToStorage();
+    }
+  }
+
+  async function setTemplateTags(type, id, tags) {
+    const list = type === "day" ? dayTemplates.value : dayLayoutTemplates.value;
+    const t = list.find((x) => x.id === id);
+    if (t) {
+      t.tags = Array.isArray(tags) ? tags : [];
+      try { await updateTemplateOnServer(id, { tags: t.tags }); } catch (e) {}
+      saveTemplatesToStorage();
     }
   }
 
@@ -2101,8 +2385,6 @@ export const useDataStore = defineStore("data", () => {
     calcMealTotals,
     recalcMealTotals,
     recalcDayTotals,
-    ensureVariant,
-    setActiveVariant,
 
     // clipboard
     mealClipboard,
@@ -2112,5 +2394,25 @@ export const useDataStore = defineStore("data", () => {
 
     // misc
     resetAll,
+
+    // variants
+    ensureVariant,
+    setActiveVariant,
+    renameVariant,
+    duplicateVariant,
+    deleteVariant,
+
+    // templates
+    fetchTemplates,
+    dayTemplates,
+    dayLayoutTemplates,
+    listTemplates,
+    saveDayLayoutTemplateFromDay,
+    saveDayTemplateFromDay,
+    applyDayLayoutTemplate,
+    applyDayTemplate,
+    deleteTemplate,
+    renameTemplate,
+    setTemplateTags,
   };
 });

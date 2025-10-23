@@ -8,12 +8,18 @@
           :program="program"
           :selected-date="selectedDay"
           @selectDay="selectDay"
+          @goToday="goToToday"
           @updateProgram="updateProgram"
         />
       </v-col>
 
       <!-- Main Editor -->
       <v-col cols="12" md="9">
+        <div class="d-flex justify-end px-2 pt-1" v-if="isSaving || savedFlash">
+          <v-chip size="x-small" :color="isSaving ? 'grey' : 'success'" variant="tonal">
+            {{ isSaving ? 'Saving…' : 'Saved' }}
+          </v-chip>
+        </div>
         <DayEditor
           v-if="selectedDay"
           :day="selectedDay"
@@ -29,7 +35,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import { useDataStore } from "@/stores/useDataStore";
 import WeekSidebar from "./WeekSidebar.vue";
 import DayEditor from "./DayEditor.vue";
@@ -107,7 +113,12 @@ const recipes = computed(() => store.recipes);
 
 // --- Select Day from Sidebar ---
 function selectDay(day) {
-  selectedDay.value = day;
+  // Ensure the day exists in the program; extend if needed
+  if (!day?.date) return;
+  const iso = day.date;
+  store.ensureProgramIncludesDate(program.value, iso);
+  const match = program.value.days.find((d) => d.date === iso) || day;
+  selectedDay.value = match;
 }
 
 // --- Update a Single Day ---
@@ -121,7 +132,7 @@ function updateDay(updatedDay) {
   }
 
   // Sync with store
-  store.updateProgram(program.value);
+  scheduleSave();
 
   // Keep selectedDay reactive
   selectedDay.value = updatedDay;
@@ -130,6 +141,70 @@ function updateDay(updatedDay) {
 // --- Update Program (used for copy/paste) ---
 function updateProgram(updatedProgram) {
   program.value = updatedProgram;
-  store.updateProgram(updatedProgram);
+  scheduleSave();
+}
+
+// Jump to today (using 4am day start rule)
+function computeTodayIso() {
+  const now = new Date();
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  const start = 4 * 60; // 04:00
+  const ref = new Date(now);
+  if (minutes < start) {
+    ref.setDate(ref.getDate() - 1);
+  }
+  return dfFormat(ref, "yyyy-MM-dd");
+}
+
+async function goToToday() {
+  if (!program.value) return;
+  const iso = computeTodayIso();
+  store.ensureProgramIncludesDate(program.value, iso);
+  const match = program.value.days.find((d) => d.date === iso) || program.value.days[0];
+  selectedDay.value = match;
+  store.updateProgram(program.value);
+}
+
+// Optional: bind 't' to jump to today
+function handleKeyDown(e) {
+  const tag = (e.target?.tagName || '').toLowerCase();
+  const isTyping = ['input', 'textarea'].includes(tag) || e.target?.isContentEditable;
+  if (isTyping) return;
+  if (e.key === 't' || e.key === 'T') {
+    e.preventDefault();
+    goToToday();
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeyDown);
+});
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeyDown);
+});
+
+// Debounced auto-save with small feedback
+const isSaving = ref(false);
+const savedFlash = ref(false);
+let saveTimeout = null;
+let flashTimeout = null;
+
+async function doSave() {
+  isSaving.value = true;
+  try {
+    await store.updateProgram(program.value);
+    savedFlash.value = true;
+    if (flashTimeout) clearTimeout(flashTimeout);
+    flashTimeout = setTimeout(() => (savedFlash.value = false), 1200);
+  } finally {
+    isSaving.value = false;
+  }
+}
+
+function scheduleSave() {
+  if (saveTimeout) clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(() => {
+    doSave();
+  }, 500);
 }
 </script>
