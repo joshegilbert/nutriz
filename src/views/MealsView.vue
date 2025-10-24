@@ -26,7 +26,11 @@
     />
 
     <v-card>
-      <v-progress-linear v-if="isLoadingMeals" indeterminate color="primary"></v-progress-linear>
+      <v-progress-linear
+        v-if="isLoadingMeals"
+        indeterminate
+        color="primary"
+      ></v-progress-linear>
       <v-card-text>
         <v-data-table
           :headers="headers"
@@ -36,16 +40,21 @@
           loading-text="Loading meals..."
         >
           <template v-slot:item.macros="{ item }">
-            Cal: {{ item.totalMacros.calories.toFixed(0) }} /
-            Prot: {{ item.totalMacros.protein.toFixed(0) }}g /
-            Carb: {{ item.totalMacros.carbs.toFixed(0) }}g /
-            Fat: {{ item.totalMacros.fat.toFixed(0) }}g
+            Cal: {{ item.totalMacros.calories.toFixed(0) }} / Prot:
+            {{ item.totalMacros.protein.toFixed(0) }}g / Carb:
+            {{ item.totalMacros.carbs.toFixed(0) }}g / Fat:
+            {{ item.totalMacros.fat.toFixed(0) }}g
+          </template>
+          <template v-slot:item.componentCount="{ item }">
+            {{ item.componentCount }} component{{
+              item.componentCount !== 1 ? "s" : ""
+            }}
           </template>
           <template v-slot:item.actions="{ item }">
-            <v-btn icon variant="text" :to="{ name: 'PlanSummary', params: { clientId: item.clientId }, query: { programId: item.id } }">
-              <v-icon>mdi-eye</v-icon>
+            <v-btn icon variant="text" @click="editMeal(item)">
+              <v-icon>mdi-pencil</v-icon>
             </v-btn>
-            <v-btn icon variant="text" color="grey" @click="deleteProgram(item)">
+            <v-btn icon variant="text" color="grey" @click="deleteMeal(item)">
               <v-icon>mdi-delete</v-icon>
             </v-btn>
           </template>
@@ -60,9 +69,17 @@
         </v-card-title>
         <v-card-text>
           <v-form ref="form">
-            <v-text-field v-model="editedItem.name" label="Meal Name*" :rules="[rules.required]" class="mb-4"></v-text-field>
-            
-            <div v-for="(component, index) in editedItem.components" :key="index">
+            <v-text-field
+              v-model="editedItem.name"
+              label="Meal Name*"
+              :rules="[rules.required]"
+              class="mb-4"
+            ></v-text-field>
+
+            <div
+              v-for="(component, index) in editedItem.components"
+              :key="index"
+            >
               <v-card class="mb-3" variant="outlined">
                 <v-card-text>
                   <v-row align="center" dense>
@@ -72,7 +89,7 @@
                         :model-value="component.foodId"
                         @update:model-value="updateComponent(index, $event)"
                         :items="foods"
-                        :item-title="item => `${item.brand} ${item.name}`"
+                        :item-title="(item) => `${item.brand} ${item.name}`"
                         item-value="id"
                         label="Select Food"
                         density="compact"
@@ -87,44 +104,61 @@
                       ></v-text-field>
                     </v-col>
                     <v-col cols="4" sm="2">
-                       <v-text-field
-                         v-model.number="component.amount"
-                         label="Amount"
-                         type="number"
-                         density="compact"
-                         hide-details
-                         @update:model-value="() => handleAmountChange(component)"
-                       ></v-text-field>
+                      <v-text-field
+                        v-model.number="component.amount"
+                        label="Amount"
+                        type="number"
+                        density="compact"
+                        hide-details
+                        @update:model-value="
+                          () => handleAmountChange(component)
+                        "
+                      ></v-text-field>
                     </v-col>
                     <v-col cols="4" sm="2">
-                       <v-text-field
-                          v-if="component.type === 'custom'"
-                          v-model="component.serving"
-                          label="Serving"
-                          placeholder="e.g. cup"
-                          density="compact"
-                          hide-details
-                        ></v-text-field>
-                       <v-text-field
-                          v-else
-                          :model-value="getServing(component)"
-                          label="Serving"
-                          density="compact"
-                          hide-details
-                          readonly
-                          variant="underlined"
-                        ></v-text-field>
+                      <v-text-field
+                        v-if="component.type === 'custom'"
+                        v-model="component.serving"
+                        label="Serving"
+                        placeholder="e.g. cup"
+                        density="compact"
+                        hide-details
+                      ></v-text-field>
+                      <v-text-field
+                        v-else
+                        :model-value="getServing(component)"
+                        label="Serving"
+                        density="compact"
+                        hide-details
+                        readonly
+                        variant="underlined"
+                      ></v-text-field>
                     </v-col>
-                     <v-col cols="4" sm="2" class="text-right">
-                        <v-btn :icon="component.expanded ? 'mdi-chevron-up' : 'mdi-chevron-down'" variant="text" @click="component.expanded = !component.expanded"></v-btn>
-                        <v-btn icon="mdi-delete" variant="text" color="grey" @click="removeComponent(index)"></v-btn>
+                    <v-col cols="4" sm="2" class="text-right">
+                      <v-btn
+                        :icon="
+                          component.expanded
+                            ? 'mdi-chevron-up'
+                            : 'mdi-chevron-down'
+                        "
+                        variant="text"
+                        @click="component.expanded = !component.expanded"
+                      ></v-btn>
+                      <v-btn
+                        icon="mdi-delete"
+                        variant="text"
+                        color="grey"
+                        @click="removeComponent(index)"
+                      ></v-btn>
                     </v-col>
                   </v-row>
-                  
+
                   <v-expand-transition>
                     <div v-if="component.expanded">
                       <v-divider class="my-3"></v-divider>
-                      <p class="text-caption">Override Macros for this Component</p>
+                      <p class="text-caption">
+                        Override Macros for this Component
+                      </p>
                       <v-row dense>
                         <v-col>
                           <v-text-field
@@ -172,13 +206,28 @@
               </v-card>
             </div>
 
-            <v-btn @click="addComponent('food')" prepend-icon="mdi-plus" class="mr-2">Add Ingredient</v-btn>
-            <v-btn @click="addComponent('custom')" prepend-icon="mdi-plus">Add Custom Item</v-btn>
+            <v-btn
+              @click="addComponent('food')"
+              prepend-icon="mdi-plus"
+              class="mr-2"
+            >
+              Add Ingredient
+            </v-btn>
+            <v-btn @click="addComponent('custom')" prepend-icon="mdi-plus">
+              Add Custom Item
+            </v-btn>
           </v-form>
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn color="blue-darken-1" variant="text" @click="closeDialog" :disabled="isSubmitting">Cancel</v-btn>
+          <v-btn
+            color="blue-darken-1"
+            variant="text"
+            @click="closeDialog"
+            :disabled="isSubmitting"
+          >
+            Cancel
+          </v-btn>
           <v-btn
             color="blue-darken-1"
             variant="text"
@@ -207,10 +256,18 @@ const form = ref(null);
 const editedIndex = ref(-1);
 const isSubmitting = ref(false);
 
-const defaultItem = { id: null, name: "", description: "", components: [], macrosSource: "auto" };
+const defaultItem = {
+  id: null,
+  name: "",
+  description: "",
+  components: [],
+  macrosSource: "auto",
+};
 const editedItem = ref(JSON.parse(JSON.stringify(defaultItem)));
 
-const formTitle = computed(() => (editedIndex.value === -1 ? "Add New Meal" : "Edit Meal"));
+const formTitle = computed(() =>
+  editedIndex.value === -1 ? "Add New Meal" : "Edit Meal"
+);
 const rules = { required: (value) => !!value || "Required." };
 
 onMounted(async () => {
@@ -226,12 +283,14 @@ onMounted(async () => {
 
 function ensureComponentMeta(component) {
   if (!component) return;
-  component.type = component.type || (component.customName != null ? "custom" : "food");
+  component.type =
+    component.type || (component.customName != null ? "custom" : "food");
   if (!component.macros) {
     component.macros = { calories: 0, protein: 0, carbs: 0, fat: 0 };
   }
   if (!component.macrosSource) {
-    component.macrosSource = component.type === "custom" ? "overridden" : "auto";
+    component.macrosSource =
+      component.type === "custom" ? "overridden" : "auto";
   }
   if (component.expanded === undefined) {
     component.expanded = component.type === "custom";
@@ -300,7 +359,10 @@ const mealsWithMacros = computed(() => {
         }
       : (meal.components || []).reduce(
           (acc, component) => {
-            const macros = getMacros(component, component.macrosSource !== "overridden");
+            const macros = getMacros(
+              component,
+              component.macrosSource !== "overridden"
+            );
             acc.calories += Number(macros.calories) || 0;
             acc.protein += Number(macros.protein) || 0;
             acc.carbs += Number(macros.carbs) || 0;
@@ -310,12 +372,17 @@ const mealsWithMacros = computed(() => {
           { calories: 0, protein: 0, carbs: 0, fat: 0 }
         );
 
-    return { ...meal, totalMacros: totals };
+    return {
+      ...meal,
+      totalMacros: totals,
+      componentCount: meal.components ? meal.components.length : 0,
+    };
   });
 });
 
 const mealTotalMacros = computed(() => {
-  if (!editedItem.value.components) return { calories: 0, protein: 0, carbs: 0, fat: 0 };
+  if (!editedItem.value.components)
+    return { calories: 0, protein: 0, carbs: 0, fat: 0 };
   return editedItem.value.components.reduce(
     (totals, component) => {
       const macros = getMacros(component);
@@ -330,10 +397,9 @@ const mealTotalMacros = computed(() => {
 });
 
 const headers = ref([
-  { title: "Program", key: "name", align: "start" },
-  { title: "Client", key: "clientName" },
-  { title: "Start", key: "startDate" },
-  { title: "Length", key: "length" },
+  { title: "Meal Name", key: "name", align: "start" },
+  { title: "Description", key: "description" },
+  { title: "Components", key: "componentCount", sortable: false },
   { title: "Macros", key: "macros", sortable: false },
   { title: "Actions", key: "actions", sortable: false },
 ]);
@@ -345,9 +411,9 @@ function addComponent(type) {
   editedItem.value.components.push(createComponent(type));
 }
 
-
 function getServing(component) {
-  if (!component || component.type === "custom") return component?.serving || "unit";
+  if (!component || component.type === "custom")
+    return component?.serving || "unit";
   const food = foods.value.find((f) => f.id === component.foodId);
   return food ? food.servingUnit : "";
 }

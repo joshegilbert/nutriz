@@ -3,9 +3,17 @@
     <!-- Header -->
     <div class="calendar-header">
       <div class="nav-buttons">
-        <v-btn icon="mdi-chevron-left" variant="text" @click="prevMonth"></v-btn>
+        <v-btn
+          icon="mdi-chevron-left"
+          variant="text"
+          @click="prevMonth"
+        ></v-btn>
         <h3 class="text-h5 font-weight-medium">{{ monthLabel }}</h3>
-        <v-btn icon="mdi-chevron-right" variant="text" @click="nextMonth"></v-btn>
+        <v-btn
+          icon="mdi-chevron-right"
+          variant="text"
+          @click="nextMonth"
+        ></v-btn>
       </div>
       <v-btn variant="outlined" color="primary" size="small" @click="goToToday">
         Today
@@ -35,7 +43,7 @@
         class="calendar-cell"
         :class="{
           'current-month': day.isCurrentMonth,
-          today: day.isToday
+          today: day.isToday,
         }"
         @click="emit('open-week', day.date)"
       >
@@ -43,24 +51,49 @@
           <span class="date" :class="{ 'text-primary': day.isToday }">
             {{ day.date.getDate() }}
           </span>
-          <v-icon
-            v-if="day.programDay"
-            size="x-small"
-            color="primary"
-            title="Has Plan"
-          >
-            mdi-check-circle
-          </v-icon>
+          <div class="cell-indicators">
+            <v-tooltip v-if="day.programDay?.notes" location="top">
+              <template #activator="{ props }">
+                <v-icon
+                  v-bind="props"
+                  size="x-small"
+                  color="primary"
+                  class="notes-indicator"
+                >
+                  mdi-note-text
+                </v-icon>
+              </template>
+              <div class="notes-preview">
+                {{ truncateNotes(day.programDay.notes) }}
+              </div>
+            </v-tooltip>
+            <v-icon
+              v-if="day.programDay"
+              size="x-small"
+              color="primary"
+              title="Has Plan"
+            >
+              mdi-check-circle
+            </v-icon>
+          </div>
         </div>
 
         <div class="cell-body">
           <div v-if="day.programDay">
             <div class="macro-chips">
-              <v-chip size="x-small" density="compact" class="kcal-chip mini-chip" variant="flat">
+              <v-chip
+                size="x-small"
+                density="compact"
+                class="kcal-chip mini-chip"
+                variant="flat"
+              >
                 {{ Math.round(day.programDay.macros?.calories || 0) }}
               </v-chip>
               <v-chip
-                v-if="day.programDay.activeVariant && day.programDay.activeVariant !== 'A'"
+                v-if="
+                  day.programDay.activeVariant &&
+                  day.programDay.activeVariant !== 'A'
+                "
                 size="x-small"
                 density="compact"
                 class="variant-chip mini-chip"
@@ -68,19 +101,38 @@
               >
                 {{ day.programDay.activeVariant }}
               </v-chip>
-              <v-chip size="x-small" density="compact" class="p-chip mini-chip" variant="tonal">
+              <v-chip
+                size="x-small"
+                density="compact"
+                class="p-chip mini-chip"
+                variant="tonal"
+              >
                 P{{ +(day.programDay.macros?.protein || 0).toFixed(0) }}
               </v-chip>
-              <v-chip size="x-small" density="compact" class="c-chip mini-chip" variant="tonal">
+              <v-chip
+                size="x-small"
+                density="compact"
+                class="c-chip mini-chip"
+                variant="tonal"
+              >
                 C{{ +(day.programDay.macros?.carbs || 0).toFixed(0) }}
               </v-chip>
-              <v-chip size="x-small" density="compact" class="f-chip mini-chip" variant="tonal">
+              <v-chip
+                size="x-small"
+                density="compact"
+                class="f-chip mini-chip"
+                variant="tonal"
+              >
                 F{{ +(day.programDay.macros?.fat || 0).toFixed(0) }}
               </v-chip>
             </div>
             <div class="text-caption text-grey meal-count d-flex align-center">
-              <v-icon size="x-small" class="mr-1">mdi-silverware-fork-knife</v-icon>
-              {{ (day.programDay.meals || []).length }} meal{{ (day.programDay.meals || []).length === 1 ? '' : 's' }}
+              <v-icon size="x-small" class="mr-1">
+                mdi-silverware-fork-knife
+              </v-icon>
+              {{ (day.programDay.meals || []).length }} meal{{
+                (day.programDay.meals || []).length === 1 ? "" : "s"
+              }}
             </div>
           </div>
           <div v-else class="text-caption text-grey no-plan">No plan</div>
@@ -102,47 +154,50 @@ import {
   addDays,
   format,
   isSameMonth,
-  isToday
+  isToday,
 } from "date-fns";
 
 const emit = defineEmits(["open-week"]);
 
 const props = defineProps({
   clientId: { type: Number, required: true },
-  programId: { type: Number, required: true }
+  programId: { type: Number, required: true },
 });
 
 const dataStore = useDataStore();
 const { clients } = storeToRefs(dataStore);
 
 const currentDate = ref(new Date());
-const client = computed(() => clients.value.find(c => c.id === props.clientId));
+const client = computed(() =>
+  clients.value.find((c) => c.id === props.clientId)
+);
 const program = computed(() =>
-  client.value?.programs.find(p => p.id === props.programId)
+  client.value?.programs.find((p) => p.id === props.programId)
 );
 
 const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const calendarDays = computed(() => {
-  const start = startOfWeek(startOfMonth(currentDate.value), { weekStartsOn: 0 });
+  const start = startOfWeek(startOfMonth(currentDate.value), {
+    weekStartsOn: 0,
+  });
   const end = endOfWeek(endOfMonth(currentDate.value), { weekStartsOn: 0 });
 
   const days = [];
   let cur = start;
   while (cur <= end) {
     const iso = format(cur, "yyyy-MM-dd");
-    const programDay = program.value?.days.find(d => d.date === iso);
+    const programDay = program.value?.days.find((d) => d.date === iso);
     days.push({
       date: cur,
       isToday: isToday(cur),
       isCurrentMonth: isSameMonth(cur, currentDate.value),
-      programDay
+      programDay,
     });
     cur = addDays(cur, 1);
   }
   return days;
 });
-
 
 const monthLabel = computed(() => format(currentDate.value, "MMMM yyyy"));
 
@@ -154,6 +209,11 @@ function nextMonth() {
 }
 function goToToday() {
   currentDate.value = new Date();
+}
+
+function truncateNotes(notes) {
+  if (!notes) return "";
+  return notes.length > 100 ? notes.substring(0, 100) + "..." : notes;
 }
 </script>
 
@@ -236,6 +296,22 @@ function goToToday() {
   justify-content: space-between;
   align-items: center;
   font-weight: bold;
+}
+
+.cell-indicators {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.notes-indicator {
+  opacity: 0.7;
+}
+
+.notes-preview {
+  max-width: 200px;
+  white-space: pre-wrap;
+  font-size: 0.8rem;
 }
 
 .cell-body {

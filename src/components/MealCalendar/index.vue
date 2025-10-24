@@ -15,11 +15,7 @@
 
       <!-- Main Editor -->
       <v-col cols="12" md="9">
-        <div class="d-flex justify-end px-2 pt-1" v-if="isSaving || savedFlash">
-          <v-chip size="x-small" :color="isSaving ? 'grey' : 'success'" variant="tonal">
-            {{ isSaving ? 'Saving…' : 'Saved' }}
-          </v-chip>
-        </div>
+        <SaveStatusIndicator :status="saveStatus" />
         <DayEditor
           v-if="selectedDay"
           :day="selectedDay"
@@ -39,6 +35,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import { useDataStore } from "@/stores/useDataStore";
 import WeekSidebar from "./WeekSidebar.vue";
 import DayEditor from "./DayEditor.vue";
+import SaveStatusIndicator from "../SaveStatusIndicator.vue";
 
 // --- Props ---
 const props = defineProps({
@@ -57,7 +54,8 @@ import { format as dfFormat } from "date-fns";
 
 function loadData() {
   // Derive program synchronously from the store
-  const client = (store.clients || []).find?.((c) => c.id === props.clientId) ||
+  const client =
+    (store.clients || []).find?.((c) => c.id === props.clientId) ||
     store.clients?.value?.find?.((c) => c.id === props.clientId);
   const prog = client?.programs?.[0];
   if (!prog) return;
@@ -67,7 +65,10 @@ function loadData() {
   const target = dfFormat(seedDate, "yyyy-MM-dd");
   store.ensureProgramIncludesDate(program.value, target);
   const days = program.value?.days || [];
-  selectedDay.value = days.find((d) => d.date === target) || pickNearestDay(days, target) || days[0];
+  selectedDay.value =
+    days.find((d) => d.date === target) ||
+    pickNearestDay(days, target) ||
+    days[0];
 }
 
 loadData();
@@ -81,7 +82,10 @@ watch(
     // Extend if needed then select
     store.ensureProgramIncludesDate(program.value, target);
     const match = program.value.days.find((day) => day.date === target);
-    selectedDay.value = match || pickNearestDay(program.value.days, target) || program.value.days[0];
+    selectedDay.value =
+      match ||
+      pickNearestDay(program.value.days, target) ||
+      program.value.days[0];
     // Persist program after extension
     store.updateProgram(program.value);
   }
@@ -90,12 +94,12 @@ watch(
 function pickNearestDay(days, targetIso) {
   if (!Array.isArray(days) || days.length === 0) return null;
   // Convert ISO to comparable timestamps (local)
-  const [ty, tm, td] = targetIso.split('-').map(Number);
+  const [ty, tm, td] = targetIso.split("-").map(Number);
   const t = new Date(ty, tm - 1, td).getTime();
   let best = null;
   let bestDiff = Number.POSITIVE_INFINITY;
   for (const d of days) {
-    const [y, m, dd] = d.date.split('-').map(Number);
+    const [y, m, dd] = d.date.split("-").map(Number);
     const ts = new Date(y, m - 1, dd).getTime();
     const diff = Math.abs(ts - t);
     if (diff < bestDiff) {
@@ -160,51 +164,62 @@ async function goToToday() {
   if (!program.value) return;
   const iso = computeTodayIso();
   store.ensureProgramIncludesDate(program.value, iso);
-  const match = program.value.days.find((d) => d.date === iso) || program.value.days[0];
+  const match =
+    program.value.days.find((d) => d.date === iso) || program.value.days[0];
   selectedDay.value = match;
   store.updateProgram(program.value);
 }
 
 // Optional: bind 't' to jump to today
 function handleKeyDown(e) {
-  const tag = (e.target?.tagName || '').toLowerCase();
-  const isTyping = ['input', 'textarea'].includes(tag) || e.target?.isContentEditable;
+  const tag = (e.target?.tagName || "").toLowerCase();
+  const isTyping =
+    ["input", "textarea"].includes(tag) || e.target?.isContentEditable;
   if (isTyping) return;
-  if (e.key === 't' || e.key === 'T') {
+  if (e.key === "t" || e.key === "T") {
     e.preventDefault();
     goToToday();
   }
 }
 
 onMounted(() => {
-  window.addEventListener('keydown', handleKeyDown);
+  window.addEventListener("keydown", handleKeyDown);
 });
 onBeforeUnmount(() => {
-  window.removeEventListener('keydown', handleKeyDown);
+  window.removeEventListener("keydown", handleKeyDown);
 });
 
-// Debounced auto-save with small feedback
-const isSaving = ref(false);
-const savedFlash = ref(false);
+// Immediate save with status feedback
+const saveStatus = ref("idle");
 let saveTimeout = null;
-let flashTimeout = null;
 
 async function doSave() {
-  isSaving.value = true;
+  if (saveStatus.value === "saving") return; // Prevent concurrent saves
+
+  saveStatus.value = "saving";
   try {
     await store.updateProgram(program.value);
-    savedFlash.value = true;
-    if (flashTimeout) clearTimeout(flashTimeout);
-    flashTimeout = setTimeout(() => (savedFlash.value = false), 1200);
-  } finally {
-    isSaving.value = false;
+    saveStatus.value = "saved";
+
+    // Auto-hide "saved" status after 2 seconds
+    if (saveTimeout) clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(() => {
+      saveStatus.value = "idle";
+    }, 2000);
+  } catch (error) {
+    console.error("Failed to save program:", error);
+    saveStatus.value = "error";
+
+    // Keep error status visible until user action
+    if (saveTimeout) clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(() => {
+      saveStatus.value = "idle";
+    }, 5000);
   }
 }
 
 function scheduleSave() {
-  if (saveTimeout) clearTimeout(saveTimeout);
-  saveTimeout = setTimeout(() => {
-    doSave();
-  }, 500);
+  // Immediate save instead of debounced
+  doSave();
 }
 </script>

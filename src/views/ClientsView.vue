@@ -384,6 +384,7 @@ function cloneClientForEdit(client) {
   base.gender = base.gender ?? "";
   base.weight = base.weight ?? null;
   base.state = base.state ?? "";
+  base.notes = base.notes ?? "";
   if (Array.isArray(base.goals)) {
     base.goals = base.goals.map((goal) => String(goal ?? ""));
   } else if (typeof base.goals === "string") {

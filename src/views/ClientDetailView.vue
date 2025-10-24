@@ -6,7 +6,12 @@
     <div v-else>
       <div class="client-header mb-3">
         <div class="client-header-left">
-          <v-btn to="/clients" icon="mdi-arrow-left" variant="text" class="client-back-btn"></v-btn>
+          <v-btn
+            to="/clients"
+            icon="mdi-arrow-left"
+            variant="text"
+            class="client-back-btn"
+          ></v-btn>
           <div class="client-left-column">
             <div class="client-photo-row">
               <div class="client-photo-box">
@@ -36,8 +41,12 @@
             </div>
             <div class="client-view-toggle">
               <v-btn-toggle v-model="viewMode" mandatory>
-                <v-btn value="week" prepend-icon="mdi-calendar-week">Week View</v-btn>
-                <v-btn value="month" prepend-icon="mdi-calendar-month">Month View</v-btn>
+                <v-btn value="week" prepend-icon="mdi-calendar-week">
+                  Week View
+                </v-btn>
+                <v-btn value="month" prepend-icon="mdi-calendar-month">
+                  Month View
+                </v-btn>
               </v-btn-toggle>
             </div>
           </div>
@@ -55,9 +64,7 @@
 
       <v-dialog v-model="aboutDialog" max-width="520">
         <v-card>
-          <v-card-title class="text-h6">
-            About {{ client.name }}
-          </v-card-title>
+          <v-card-title class="text-h6">About {{ client.name }}</v-card-title>
           <v-card-text>
             <div class="mb-4 d-flex align-center">
               <div>
@@ -79,20 +86,19 @@
 
             <v-expansion-panels multiple>
               <v-expansion-panel>
-                <v-expansion-panel-title>
-                  Goals
-                </v-expansion-panel-title>
+                <v-expansion-panel-title>Goals</v-expansion-panel-title>
                 <v-expansion-panel-text>
                   <div v-if="goalList.length > 0">
                     <v-list density="compact">
-                      <v-list-item v-for="(goal, index) in goalList" :key="`goal-display-${index}`">
+                      <v-list-item
+                        v-for="(goal, index) in goalList"
+                        :key="`goal-display-${index}`"
+                      >
                         <v-list-item-title>{{ goal }}</v-list-item-title>
                       </v-list-item>
                     </v-list>
                   </div>
-                  <p v-else class="text-body-2 mb-0">
-                    No goals recorded.
-                  </p>
+                  <p v-else class="text-body-2 mb-0">No goals recorded.</p>
                   <div class="text-right mt-4">
                     <v-btn
                       variant="text"
@@ -114,15 +120,21 @@
                   <v-list density="compact">
                     <v-list-item>
                       <v-list-item-title>Start Day</v-list-item-title>
-                      <v-list-item-subtitle>{{ programStartLabel }}</v-list-item-subtitle>
+                      <v-list-item-subtitle>
+                        {{ programStartLabel }}
+                      </v-list-item-subtitle>
                     </v-list-item>
                     <v-list-item>
                       <v-list-item-title>Length</v-list-item-title>
-                      <v-list-item-subtitle>{{ programLengthLabel }}</v-list-item-subtitle>
+                      <v-list-item-subtitle>
+                        {{ programLengthLabel }}
+                      </v-list-item-subtitle>
                     </v-list-item>
                     <v-list-item>
                       <v-list-item-title>End Day</v-list-item-title>
-                      <v-list-item-subtitle>{{ programEndLabel }}</v-list-item-subtitle>
+                      <v-list-item-subtitle>
+                        {{ programEndLabel }}
+                      </v-list-item-subtitle>
                     </v-list-item>
                   </v-list>
                   <p v-if="!primaryProgram" class="text-body-2 mb-0 mt-2">
@@ -149,19 +161,27 @@
                   <v-list density="compact">
                     <v-list-item>
                       <v-list-item-title>Age</v-list-item-title>
-                      <v-list-item-subtitle>{{ personalInfo.age }}</v-list-item-subtitle>
+                      <v-list-item-subtitle>
+                        {{ personalInfo.age }}
+                      </v-list-item-subtitle>
                     </v-list-item>
                     <v-list-item>
                       <v-list-item-title>Gender</v-list-item-title>
-                      <v-list-item-subtitle>{{ personalInfo.gender }}</v-list-item-subtitle>
+                      <v-list-item-subtitle>
+                        {{ personalInfo.gender }}
+                      </v-list-item-subtitle>
                     </v-list-item>
                     <v-list-item>
                       <v-list-item-title>Weight</v-list-item-title>
-                      <v-list-item-subtitle>{{ personalInfo.weight }}</v-list-item-subtitle>
+                      <v-list-item-subtitle>
+                        {{ personalInfo.weight }}
+                      </v-list-item-subtitle>
                     </v-list-item>
                     <v-list-item>
                       <v-list-item-title>State</v-list-item-title>
-                      <v-list-item-subtitle>{{ personalInfo.state }}</v-list-item-subtitle>
+                      <v-list-item-subtitle>
+                        {{ personalInfo.state }}
+                      </v-list-item-subtitle>
                     </v-list-item>
                   </v-list>
                   <div class="text-right mt-4">
@@ -185,11 +205,15 @@
                   <v-list density="compact">
                     <v-list-item>
                       <v-list-item-title>Email</v-list-item-title>
-                      <v-list-item-subtitle>{{ contactInfo.email }}</v-list-item-subtitle>
+                      <v-list-item-subtitle>
+                        {{ contactInfo.email }}
+                      </v-list-item-subtitle>
                     </v-list-item>
                     <v-list-item>
                       <v-list-item-title>Phone</v-list-item-title>
-                      <v-list-item-subtitle>{{ contactInfo.phone }}</v-list-item-subtitle>
+                      <v-list-item-subtitle>
+                        {{ contactInfo.phone }}
+                      </v-list-item-subtitle>
                     </v-list-item>
                   </v-list>
                   <div class="text-right mt-4">
@@ -204,7 +228,6 @@
                   </div>
                 </v-expansion-panel-text>
               </v-expansion-panel>
-
             </v-expansion-panels>
           </v-card-text>
           <v-card-actions>
@@ -372,9 +395,7 @@
             <v-btn variant="text" color="grey" @click="closeEditDialog">
               Cancel
             </v-btn>
-            <v-btn variant="text" color="primary" @click="saveEdit">
-              Save
-            </v-btn>
+            <v-btn variant="text" color="primary" @click="saveEdit">Save</v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>
@@ -529,17 +550,19 @@ function enrichProgramDay(day) {
   const meals = Array.isArray(day.meals) ? day.meals : [];
   const totals = meals.reduce(
     (acc, meal) => {
-      const m = meal?.macros || (meal?.items || []).reduce(
-        (a, item) => {
-          const im = item?.macros || {};
-          a.calories += im.calories || 0;
-          a.protein += im.protein || 0;
-          a.carbs += im.carbs || 0;
-          a.fat += im.fat || 0;
-          return a;
-        },
-        { calories: 0, protein: 0, carbs: 0, fat: 0 }
-      );
+      const m =
+        meal?.macros ||
+        (meal?.items || []).reduce(
+          (a, item) => {
+            const im = item?.macros || {};
+            a.calories += im.calories || 0;
+            a.protein += im.protein || 0;
+            a.carbs += im.carbs || 0;
+            a.fat += im.fat || 0;
+            return a;
+          },
+          { calories: 0, protein: 0, carbs: 0, fat: 0 }
+        );
       acc.calories += m.calories || 0;
       acc.protein += m.protein || 0;
       acc.carbs += m.carbs || 0;
@@ -548,7 +571,10 @@ function enrichProgramDay(day) {
     },
     { calories: 0, protein: 0, carbs: 0, fat: 0 }
   );
-  const plannedItemCount = meals.reduce((acc, meal) => acc + (meal?.items?.length || 0), 0);
+  const plannedItemCount = meals.reduce(
+    (acc, meal) => acc + (meal?.items?.length || 0),
+    0
+  );
   return { ...day, dateObj, totals, plannedItemCount };
 }
 
@@ -557,7 +583,9 @@ const enrichedProgramDays = computed(() => {
   return activeProgram.value.days
     .map(enrichProgramDay)
     .filter(Boolean)
-    .sort((a, b) => (a.dateObj?.getTime?.() || 0) - (b.dateObj?.getTime?.() || 0));
+    .sort(
+      (a, b) => (a.dateObj?.getTime?.() || 0) - (b.dateObj?.getTime?.() || 0)
+    );
 });
 
 const hasActiveProgram = computed(() => Boolean(activeProgram.value));
@@ -565,10 +593,7 @@ const hasActiveProgram = computed(() => Boolean(activeProgram.value));
 const scheduledDayCount = computed(() => enrichedProgramDays.value.length);
 
 const totalPlannedCalories = computed(() =>
-  enrichedProgramDays.value.reduce(
-    (acc, day) => acc + day.totals.calories,
-    0
-  )
+  enrichedProgramDays.value.reduce((acc, day) => acc + day.totals.calories, 0)
 );
 
 const averageDailyCalories = computed(() => {
@@ -577,10 +602,7 @@ const averageDailyCalories = computed(() => {
 });
 
 const totalPlannedItems = computed(() =>
-  enrichedProgramDays.value.reduce(
-    (acc, day) => acc + day.plannedItemCount,
-    0
-  )
+  enrichedProgramDays.value.reduce((acc, day) => acc + day.plannedItemCount, 0)
 );
 
 const planLengthDays = computed(() => activeProgram.value?.length ?? null);
@@ -594,9 +616,13 @@ const planStartDate = computed(() => {
 
 const planEndDate = computed(() => {
   if (activeProgram.value?.startDate && planLengthDays.value) {
-    return addDays(parseISO(activeProgram.value.startDate), planLengthDays.value - 1);
+    return addDays(
+      parseISO(activeProgram.value.startDate),
+      planLengthDays.value - 1
+    );
   }
-  const lastDay = enrichedProgramDays.value[enrichedProgramDays.value.length - 1];
+  const lastDay =
+    enrichedProgramDays.value[enrichedProgramDays.value.length - 1];
   return lastDay?.dateObj ?? null;
 });
 
@@ -700,14 +726,19 @@ const personalInfo = computed(() => {
 
 // Program detail labels for the About dialog
 const primaryProgram = activeProgram;
-const programStartLabel = computed(() => primaryProgram.value?.startDate || "Not set");
+const programStartLabel = computed(
+  () => primaryProgram.value?.startDate || "Not set"
+);
 const programLengthLabel = computed(() => {
   const len = primaryProgram.value?.length || 0;
   return len ? `${len} day${len === 1 ? "" : "s"}` : "Not set";
 });
 const programEndLabel = computed(() => {
   if (primaryProgram.value?.startDate && primaryProgram.value?.length) {
-    const end = addDays(parseISO(primaryProgram.value.startDate), primaryProgram.value.length - 1);
+    const end = addDays(
+      parseISO(primaryProgram.value.startDate),
+      primaryProgram.value.length - 1
+    );
     return toLocalISODate(end);
   }
   return "Not set";
@@ -717,15 +748,22 @@ const clientInitials = computed(() => {
   const name = (client.value?.name || "").trim();
   if (!name) return "N/A";
   const parts = name.split(/\s+/).filter(Boolean);
-  const initials = parts.slice(0, 2).map((part) => part.charAt(0).toUpperCase()).join("");
+  const initials = parts
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
   return initials || "N/A";
 });
 
 const goalList = computed(() => {
   const goals = client.value?.goals;
-  if (Array.isArray(goals)) return goals.filter((g) => !!(g && String(g).trim()));
+  if (Array.isArray(goals))
+    return goals.filter((g) => !!(g && String(g).trim()));
   if (typeof goals === "string" && goals.trim().length > 0) {
-    return goals.split("\n").map((goal) => goal.trim()).filter(Boolean);
+    return goals
+      .split("\n")
+      .map((goal) => goal.trim())
+      .filter(Boolean);
   }
   return [];
 });
@@ -793,13 +831,15 @@ function ensureMacros(macros = {}) {
 
 function buildProgramDays(startIso, length, existingDays = []) {
   const startDate = new Date(startIso);
-  if (Number.isNaN(startDate.getTime()) || !Number.isInteger(length) || length <= 0) {
+  if (
+    Number.isNaN(startDate.getTime()) ||
+    !Number.isInteger(length) ||
+    length <= 0
+  ) {
     return existingDays.slice();
   }
 
-  const map = new Map(
-    existingDays.map((day) => [day.date, day])
-  );
+  const map = new Map(existingDays.map((day) => [day.date, day]));
 
   const days = [];
   for (let i = 0; i < length; i++) {
@@ -905,7 +945,10 @@ async function saveEdit() {
   switch (editSection.value) {
     case "status": {
       target.status = editModel.value.status || target.status;
-      target.last_active = editModel.value.lastActive || target.last_active || toLocalISODate(new Date());
+      target.last_active =
+        editModel.value.lastActive ||
+        target.last_active ||
+        toLocalISODate(new Date());
       try {
         await dataStore.updateClient(target.id, {
           status: target.status,
@@ -923,7 +966,11 @@ async function saveEdit() {
         target.programs = [];
       }
       const existingProgram = target.programs?.[0] || null;
-      const days = buildProgramDays(startIso, length, existingProgram?.days || []);
+      const days = buildProgramDays(
+        startIso,
+        length,
+        existingProgram?.days || []
+      );
 
       if (existingProgram) {
         const updatedProgram = {
@@ -933,7 +980,11 @@ async function saveEdit() {
           days,
         };
         target.programs.splice(0, 1, updatedProgram);
-        dataStore.updateProgram?.(updatedProgram);
+        try {
+          await dataStore.updateProgram(updatedProgram);
+        } catch (e) {
+          console.error("Failed to update program:", e);
+        }
       } else {
         const newProgram = {
           id: Date.now(),
@@ -946,6 +997,11 @@ async function saveEdit() {
           target.programs.splice(0, 1, newProgram);
         } else {
           target.programs.push(newProgram);
+        }
+        try {
+          await dataStore.updateProgram(newProgram);
+        } catch (e) {
+          console.error("Failed to create program:", e);
         }
       }
       break;
@@ -967,11 +1023,14 @@ async function saveEdit() {
       target.state = editModel.value.state || "";
       try {
         await dataStore.updateClient(target.id, {
+          age: target.age,
           gender: target.gender,
           weight: target.weight,
           state: target.state,
         });
-      } catch (e) {}
+      } catch (e) {
+        console.error("Failed to update personal info:", e);
+      }
       break;
     }
     case "contact": {
@@ -987,7 +1046,9 @@ async function saveEdit() {
     }
     case "goals": {
       const goals = Array.isArray(editModel.value.goals)
-        ? editModel.value.goals.map((goal) => (goal || "").trim()).filter(Boolean)
+        ? editModel.value.goals
+            .map((goal) => (goal || "").trim())
+            .filter(Boolean)
         : [];
       target.goals = goals;
       try {

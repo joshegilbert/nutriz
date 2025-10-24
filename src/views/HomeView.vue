@@ -112,14 +112,22 @@ const router = useRouter();
 const authStore = useAuthStore();
 const dataStore = useDataStore();
 
-const { clients, foods, recipes, isLoadingClients, isLoadingFoods, isLoadingRecipes, lastError } =
+const {
+  clients,
+  foods,
+  recipes,
+  isLoadingClients,
+  isLoadingFoods,
+  isLoadingRecipes,
+  lastError,
+} =
   storeToRefs(dataStore);
 
 const errorMessage = ref('');
 const welcomeName = computed(() => authStore.user?.email?.split('@')[0] || 'coach');
 
 const isLoading = computed(
-  () => isLoadingClients.value || isLoadingFoods.value || isLoadingRecipes.value
+  () => Boolean(isLoadingClients?.value || isLoadingFoods?.value || isLoadingRecipes?.value)
 );
 
 const heroHighlights = [
@@ -141,14 +149,17 @@ const heroHighlights = [
 ];
 
 const readyProgramCount = computed(() =>
-  clients.value.reduce((count, client) => count + (client.programs?.length ? 1 : 0), 0)
+  (clients?.value ?? []).reduce(
+    (count, client) => count + (client.programs?.length ? 1 : 0),
+    0
+  )
 );
 
 const statCards = computed(() => [
   {
     key: 'clients',
     label: 'Active clients',
-    value: clients.value.length,
+    value: clients?.value?.length ?? 0,
     icon: 'mdi-account-heart',
     route: '/clients',
     ctaLabel: 'View roster',
@@ -157,7 +168,7 @@ const statCards = computed(() => [
   {
     key: 'recipes',
     label: 'Recipes crafted',
-    value: recipes.value.length,
+    value: recipes?.value?.length ?? 0,
     icon: 'mdi-silverware-fork-knife',
     route: '/recipes',
     ctaLabel: 'Open library',
@@ -166,7 +177,7 @@ const statCards = computed(() => [
   {
     key: 'foods',
     label: 'Foods tracked',
-    value: foods.value.length,
+    value: foods?.value?.length ?? 0,
     icon: 'mdi-food-apple-outline',
     route: '/foods',
     ctaLabel: 'Review foods',
@@ -183,7 +194,7 @@ const statCards = computed(() => [
   },
 ]);
 
-const recentRecipes = computed(() => recipes.value.slice(0, 4));
+const recentRecipes = computed(() => (recipes?.value ?? []).slice(0, 4));
 
 const recipeSubtitle = (recipe) => {
   const macros = recipe.totalMacros || {};
@@ -201,7 +212,8 @@ onMounted(async () => {
       dataStore.fetchRecipes(),
     ]);
   } catch (error) {
-    errorMessage.value = lastError.value || error.message || 'Unable to load dashboard data.';
+    errorMessage.value =
+      lastError?.value || error.message || 'Unable to load dashboard data.';
   }
 });
 

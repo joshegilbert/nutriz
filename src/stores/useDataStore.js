@@ -2,6 +2,10 @@ import { defineStore } from "pinia";
 import { ref } from "vue";
 import api from "@/services/api";
 
+const MEAL_TEMPLATE_API_ENABLED =
+  import.meta.env.VITE_ENABLE_MEAL_TEMPLATE_API === "true";
+const MEAL_TEMPLATE_STORAGE_KEY = "nutriz.mealTemplates.v1";
+
 function createId(prefix = "id") {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -748,6 +752,11 @@ export const useDataStore = defineStore("data", () => {
   const isLoadingRecipes = ref(false);
   const lastError = ref("");
 
+  // Meal templates
+  const mealTemplates = ref([]);
+  const isLoadingMealTemplates = ref(false);
+  const mealTemplateFeatureAvailable = ref(MEAL_TEMPLATE_API_ENABLED);
+
   // Clipboard for meals (copy/paste across the day editor)
   const mealClipboard = ref(null);
   // Templates storage
@@ -760,7 +769,8 @@ export const useDataStore = defineStore("data", () => {
       const raw = localStorage.getItem(TPL_STORAGE_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed.dayTemplates)) dayTemplates.value = parsed.dayTemplates;
+      if (Array.isArray(parsed.dayTemplates))
+        dayTemplates.value = parsed.dayTemplates;
       if (Array.isArray(parsed.dayLayoutTemplates))
         dayLayoutTemplates.value = parsed.dayLayoutTemplates;
     } catch (_) {
@@ -779,6 +789,32 @@ export const useDataStore = defineStore("data", () => {
     }
   }
 
+  function loadMealTemplatesFromStorage() {
+    try {
+      const raw = localStorage.getItem(MEAL_TEMPLATE_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        mealTemplates.value = parsed
+          .map((tpl) => normaliseMealTemplate(tpl))
+          .filter(Boolean);
+      }
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  function saveMealTemplatesToStorage() {
+    try {
+      localStorage.setItem(
+        MEAL_TEMPLATE_STORAGE_KEY,
+        JSON.stringify(mealTemplates.value)
+      );
+    } catch (_) {
+      // ignore
+    }
+  }
+
   function resetAll() {
     foods.value = [];
     meals.value = [];
@@ -792,10 +828,14 @@ export const useDataStore = defineStore("data", () => {
     mealClipboard.value = null;
     dayTemplates.value = [];
     dayLayoutTemplates.value = [];
+    mealTemplates.value = [];
+    mealTemplateFeatureAvailable.value = MEAL_TEMPLATE_API_ENABLED;
+    saveMealTemplatesToStorage();
   }
 
   // Load templates on init
   loadTemplatesFromStorage();
+  loadMealTemplatesFromStorage();
 
   // ---------------------------------------------------------------------------
   //  DATA NORMALISERS
@@ -840,7 +880,9 @@ export const useDataStore = defineStore("data", () => {
   }
 
   function toDay(day) {
-    const baseMeals = Array.isArray(day.meals) ? day.meals.map((m) => toMeal(m)) : [];
+    const baseMeals = Array.isArray(day.meals)
+      ? day.meals.map((m) => toMeal(m))
+      : [];
     // Variants support: prefer variants' active set if present
     const variants = Array.isArray(day.variants)
       ? day.variants.map((v) => ({
@@ -852,8 +894,18 @@ export const useDataStore = defineStore("data", () => {
         }))
       : [];
     const activeKey = day.activeVariant || (variants[0]?.key ?? "A");
+    if (variants.length) {
+      const activeVariant =
+        variants.find((variant) => variant.key === activeKey) || variants[0];
+      activeVariant.meals = baseMeals;
+      if (day.macrosSource !== "overridden") {
+        activeVariant.macros = createMacroTotals(day.macros);
+        activeVariant.macrosSource = day.macrosSource || "auto";
+      }
+    }
     const activeMeals = variants.length
-      ? (variants.find((v) => v.key === activeKey)?.meals || variants[0].meals)
+      ? variants.find((variant) => variant.key === activeKey)?.meals ||
+        variants[0].meals
       : baseMeals;
 
     return {
@@ -881,13 +933,21 @@ export const useDataStore = defineStore("data", () => {
     const base = cloneDeep(program);
     const id = base._id || base.id || createId("program");
     const clientId = base.clientId || base.client || base.owner || null;
-    const startDate = base.startDate || base.days?.[0]?.date || toLocalISODate(new Date());
+    const startDate =
+      base.startDate || base.days?.[0]?.date || toLocalISODate(new Date());
     const macros = createMacroTotals(base.macros);
-    const macrosSource = base.macrosSource === "overridden" ? "overridden" : "auto";
+    const macrosSource =
+      base.macrosSource === "overridden" ? "overridden" : "auto";
 
-    let days = Array.isArray(base.days) ? base.days.map((day) => toDay(day)) : [];
+    let days = Array.isArray(base.days)
+      ? base.days.map((day) => toDay(day))
+      : [];
     if (!days.length) {
-      const blank = createBlankProgram({ clientId, startDate, length: base.length || 7 });
+      const blank = createBlankProgram({
+        clientId,
+        startDate,
+        length: base.length || 7,
+      });
       days = blank.days;
     }
 
@@ -940,7 +1000,8 @@ export const useDataStore = defineStore("data", () => {
   function normaliseClient(document, previous = null) {
     if (!document && !previous) return null;
     const existing = previous || {};
-    const id = document?._id || document?.id || existing.id || createId("client");
+    const id =
+      document?._id || document?.id || existing.id || createId("client");
 
     const dobIso = document?.dob
       ? toLocalISODate(new Date(document.dob))
@@ -1020,7 +1081,10 @@ export const useDataStore = defineStore("data", () => {
       carbsPerServing: document.carbsPerServing || 0,
       fatPerServing: document.fatPerServing || 0,
       servings: Array.isArray(document.servings)
-        ? document.servings.map((s) => ({ label: s.label || "", grams: Number(s.grams) || 0 }))
+        ? document.servings.map((s) => ({
+            label: s.label || "",
+            grams: Number(s.grams) || 0,
+          }))
         : [],
       macrosPerServing: {
         calories: document.caloriesPerServing || 0,
@@ -1043,7 +1107,10 @@ export const useDataStore = defineStore("data", () => {
       fatPerServing: Number(payload.fatPerServing) || 0,
       servings: Array.isArray(payload.servings)
         ? payload.servings
-            .map((s) => ({ label: String(s.label || "").trim(), grams: Number(s.grams) || 0 }))
+            .map((s) => ({
+              label: String(s.label || "").trim(),
+              grams: Number(s.grams) || 0,
+            }))
             .filter((s) => s.label && s.grams > 0)
         : [],
     };
@@ -1072,16 +1139,13 @@ export const useDataStore = defineStore("data", () => {
       };
     });
 
-    const totalMacros = components.reduce(
-      (acc, component) => {
-        acc.calories += component.macros?.calories || 0;
-        acc.protein += component.macros?.protein || 0;
-        acc.carbs += component.macros?.carbs || 0;
-        acc.fat += component.macros?.fat || 0;
-        return acc;
-      },
-      createMacroTotals()
-    );
+    const totalMacros = components.reduce((acc, component) => {
+      acc.calories += component.macros?.calories || 0;
+      acc.protein += component.macros?.protein || 0;
+      acc.carbs += component.macros?.carbs || 0;
+      acc.fat += component.macros?.fat || 0;
+      return acc;
+    }, createMacroTotals());
 
     return {
       id: document._id || document.id,
@@ -1104,7 +1168,10 @@ export const useDataStore = defineStore("data", () => {
           quantity: Number(component.amount) || 1,
           notes: component.notes || "",
         });
-      } else if (component.type === "meal" && Array.isArray(component.components)) {
+      } else if (
+        component.type === "meal" &&
+        Array.isArray(component.components)
+      ) {
         component.components.forEach((item) => {
           if (item.foodId) {
             ingredients.push({
@@ -1124,6 +1191,87 @@ export const useDataStore = defineStore("data", () => {
       instructions: payload.instructions || "",
       ingredients,
       tags: payload.tags || [],
+    };
+  }
+
+  function normaliseMealTemplate(document) {
+    if (!document) return null;
+
+    return {
+      id: document._id || document.id,
+      name: document.name || "",
+      tags: document.tags || [],
+      meal: {
+        name: document.meal?.name || "",
+        time: document.meal?.time || "",
+        items: (document.meal?.items || []).map((item) => toMealItem(item)),
+        macros: createMacroTotals(document.meal?.macros),
+        macrosSource: document.meal?.macrosSource || "auto",
+      },
+      totalMacros: createMacroTotals(document.totalMacros),
+      itemCount: document.itemCount || 0,
+      createdAt: document.createdAt
+        ? new Date(document.createdAt).getTime()
+        : Date.now(),
+      updatedAt: document.updatedAt
+        ? new Date(document.updatedAt).getTime()
+        : Date.now(),
+    };
+  }
+
+  function serialiseMealTemplate(payload = {}) {
+    return {
+      name: payload.name,
+      tags: payload.tags || [],
+      meal: {
+        name: payload.meal?.name || "",
+        time: payload.meal?.time || "",
+        items: (payload.meal?.items || []).map((item) => ({
+          id: item.id || createId("item"),
+          type: item.type || "custom",
+          sourceId: item.sourceId ?? null,
+          name: item.name || "",
+          amount: Number(item.amount) || 0,
+          unit: item.unit || "",
+          notes: item.notes || "",
+          time: item.time || "",
+          macros: roundMacros(item.macros || {}),
+          macrosSource:
+            item.macrosSource === "overridden" ? "overridden" : "auto",
+        })),
+        macros: roundMacros(payload.meal?.macros || {}),
+        macrosSource:
+          payload.meal?.macrosSource === "overridden" ? "overridden" : "auto",
+      },
+    };
+  }
+
+  function buildLocalMealTemplate(payload = {}, base = {}) {
+    const seed = base || {};
+    const mealSource = payload.meal || seed.meal || {};
+    const meal = toMeal({
+      ...mealSource,
+      id: mealSource.id || createId("meal"),
+      items: mealSource.items || [],
+    });
+    recalcMealTotals(meal);
+    const nameInput =
+      payload.name ?? seed.name ?? meal.name ?? "Meal template";
+    const name =
+      String(nameInput || "Meal template").trim() || "Meal template";
+    return {
+      id: seed.id || payload.id || createId("meal_tpl"),
+      name,
+      tags: Array.isArray(payload.tags)
+        ? payload.tags
+        : Array.isArray(seed.tags)
+        ? seed.tags
+        : [],
+      meal,
+      totalMacros: calcMealTotals(meal),
+      itemCount: meal.items.length,
+      createdAt: seed.createdAt || Date.now(),
+      updatedAt: Date.now(),
     };
   }
 
@@ -1208,20 +1356,31 @@ export const useDataStore = defineStore("data", () => {
       ...(document || {}),
     };
 
-    program.id = document?._id || document?.id || existing.id || createId("program");
+    program.id =
+      document?._id || document?.id || existing.id || createId("program");
     program.clientId =
-      program.clientId || document?.client || document?.clientId || existing.clientId || null;
+      program.clientId ||
+      document?.client ||
+      document?.clientId ||
+      existing.clientId ||
+      null;
     if (program.clientId) {
       program.clientId = String(program.clientId);
     }
     program.name = document?.name || existing.name || "";
     program.startDate =
-      document?.startDate || existing.startDate || program.days?.[0]?.date || toLocalISODate(new Date());
+      document?.startDate ||
+      existing.startDate ||
+      program.days?.[0]?.date ||
+      toLocalISODate(new Date());
     program.length =
-      document?.length || existing.length || (document?.days?.length ?? existing.days?.length ?? 0);
+      document?.length ||
+      existing.length ||
+      (document?.days?.length ?? existing.days?.length ?? 0);
     program.days = document?.days || existing.days || [];
     program.macros = document?.macros || existing.macros || createMacroTotals();
-    program.macrosSource = document?.macrosSource || existing.macrosSource || "auto";
+    program.macrosSource =
+      document?.macrosSource || existing.macrosSource || "auto";
 
     return ensureProgramStructure(program);
   }
@@ -1234,7 +1393,8 @@ export const useDataStore = defineStore("data", () => {
       startDate: structured.startDate,
       length: structured.length || structured.days.length,
       macros: roundMacros(structured.macros),
-      macrosSource: structured.macrosSource === "overridden" ? "overridden" : "auto",
+      macrosSource:
+        structured.macrosSource === "overridden" ? "overridden" : "auto",
       days: (structured.days || []).map((day) => ({
         date: day.date,
         macros: roundMacros(day.macros),
@@ -1246,7 +1406,8 @@ export const useDataStore = defineStore("data", () => {
           mealTime: meal.mealTime || meal.name || "Meal",
           time: meal.time || "",
           macros: roundMacros(meal.macros),
-          macrosSource: meal.macrosSource === "overridden" ? "overridden" : "auto",
+          macrosSource:
+            meal.macrosSource === "overridden" ? "overridden" : "auto",
           items: (meal.items || []).map((item) => ({
             id: item.id,
             type: item.type || (item.sourceId ? "food" : "custom"),
@@ -1257,7 +1418,8 @@ export const useDataStore = defineStore("data", () => {
             notes: item.notes || "",
             time: item.time || "",
             macros: roundMacros(item.macros),
-            macrosSource: item.macrosSource === "overridden" ? "overridden" : "auto",
+            macrosSource:
+              item.macrosSource === "overridden" ? "overridden" : "auto",
           })),
         })),
         activeVariant: day.activeVariant || "A",
@@ -1272,7 +1434,8 @@ export const useDataStore = defineStore("data", () => {
             mealTime: meal.mealTime || meal.name || "Meal",
             time: meal.time || "",
             macros: roundMacros(meal.macros),
-            macrosSource: meal.macrosSource === "overridden" ? "overridden" : "auto",
+            macrosSource:
+              meal.macrosSource === "overridden" ? "overridden" : "auto",
             items: (meal.items || []).map((item) => ({
               id: item.id,
               type: item.type || (item.sourceId ? "food" : "custom"),
@@ -1283,7 +1446,8 @@ export const useDataStore = defineStore("data", () => {
               notes: item.notes || "",
               time: item.time || "",
               macros: roundMacros(item.macros),
-              macrosSource: item.macrosSource === "overridden" ? "overridden" : "auto",
+              macrosSource:
+                item.macrosSource === "overridden" ? "overridden" : "auto",
             })),
           })),
         })),
@@ -1327,7 +1491,8 @@ export const useDataStore = defineStore("data", () => {
       const found = food.servings.find((s) => s.label === unitLabel);
       if (found && found.grams > 0) {
         const perGram = {
-          calories: (food.macrosPerServing.calories || 0) / food.gramsPerServing,
+          calories:
+            (food.macrosPerServing.calories || 0) / food.gramsPerServing,
           protein: (food.macrosPerServing.protein || 0) / food.gramsPerServing,
           carbs: (food.macrosPerServing.carbs || 0) / food.gramsPerServing,
           fat: (food.macrosPerServing.fat || 0) / food.gramsPerServing,
@@ -1400,37 +1565,51 @@ export const useDataStore = defineStore("data", () => {
   }
 
   function collectMealMacros(components = []) {
-    return components.reduce((totals, component) => {
-      return addMacros(totals, collectComponentMacros(component));
-    }, { ...EMPTY_MACROS });
+    return components.reduce(
+      (totals, component) => {
+        return addMacros(totals, collectComponentMacros(component));
+      },
+      { ...EMPTY_MACROS }
+    );
   }
 
   function collectRecipeMacros(components = []) {
-    return components.reduce((totals, component) => {
-      const componentType = component.type || (component.foodId ? "food" : null);
+    return components.reduce(
+      (totals, component) => {
+        const componentType =
+          component.type || (component.foodId ? "food" : null);
 
-      if (componentType === "food") {
-        const foodId = component.foodId ?? component.sourceId ?? component.id;
-        if (foodId == null) {
-          return totals;
+        if (componentType === "food") {
+          const foodId = component.foodId ?? component.sourceId ?? component.id;
+          if (foodId == null) {
+            return totals;
+          }
+
+          const food = getItemDetails("food", foodId);
+          if (!food) {
+            return totals;
+          }
+
+          const macros = scaleMacros(
+            food.macrosPerServing,
+            component.amount ?? 1
+          );
+          return addMacros(totals, macros);
         }
 
-        const food = getItemDetails("food", foodId);
-        if (!food) {
-          return totals;
+        if (componentType && component.sourceId != null) {
+          const macros = calculateItemMacros(
+            componentType,
+            component.sourceId,
+            component.amount
+          );
+          return addMacros(totals, macros);
         }
 
-        const macros = scaleMacros(food.macrosPerServing, component.amount ?? 1);
-        return addMacros(totals, macros);
-      }
-
-      if (componentType && component.sourceId != null) {
-        const macros = calculateItemMacros(componentType, component.sourceId, component.amount);
-        return addMacros(totals, macros);
-      }
-
-      return addMacros(totals, component.macros);
-    }, { ...EMPTY_MACROS });
+        return addMacros(totals, component.macros);
+      },
+      { ...EMPTY_MACROS }
+    );
   }
 
   function calculateItemMacros(type, id, amount = 1) {
@@ -1519,7 +1698,8 @@ export const useDataStore = defineStore("data", () => {
     if (!Array.isArray(day.variants)) day.variants = [];
     const exists = day.variants.find((v) => v.key === key);
     if (exists) return exists;
-    const source = day.variants.find((v) => v.key === duplicateFrom) || day.variants[0];
+    const source =
+      day.variants.find((v) => v.key === duplicateFrom) || day.variants[0];
     const next = {
       key,
       label: label || (key === "A" ? "Option A" : `Option ${key}`),
@@ -1551,7 +1731,9 @@ export const useDataStore = defineStore("data", () => {
   }
 
   function nextVariantKeyFor(day) {
-    const keys = (day?.variants || []).map((v) => String(v.key || "").toUpperCase());
+    const keys = (day?.variants || []).map((v) =>
+      String(v.key || "").toUpperCase()
+    );
     let code = "A".charCodeAt(0);
     while (keys.includes(String.fromCharCode(code))) code++;
     return String.fromCharCode(code);
@@ -1594,20 +1776,29 @@ export const useDataStore = defineStore("data", () => {
   // Backend template sync helpers
   async function fetchTemplates() {
     try {
-      const { data } = await api.get('/templates');
+      const { data } = await api.get("/templates");
       const days = [];
       const layouts = [];
       (data || []).forEach((tpl) => {
         const base = {
           id: tpl._id || tpl.id,
-          name: tpl.name || '',
+          name: tpl.name || "",
           tags: Array.isArray(tpl.tags) ? tpl.tags : [],
           createdAt: new Date(tpl.createdAt || Date.now()).getTime(),
         };
-        if (tpl.type === 'day') {
-          days.push({ ...base, meals: (tpl.meals || []).map((m) => toMeal(m)) });
-        } else if (tpl.type === 'layout') {
-          layouts.push({ ...base, meals: (tpl.layoutMeals || []).map((lm) => ({ name: lm.name || 'Meal', time: lm.time || '' })) });
+        if (tpl.type === "day") {
+          days.push({
+            ...base,
+            meals: (tpl.meals || []).map((m) => toMeal(m)),
+          });
+        } else if (tpl.type === "layout") {
+          layouts.push({
+            ...base,
+            meals: (tpl.layoutMeals || []).map((lm) => ({
+              name: lm.name || "Meal",
+              time: lm.time || "",
+            })),
+          });
         }
       });
       dayTemplates.value = days;
@@ -1621,7 +1812,7 @@ export const useDataStore = defineStore("data", () => {
   }
 
   async function createTemplateOnServer(payload) {
-    const { data } = await api.post('/templates', payload);
+    const { data } = await api.post("/templates", payload);
     return data;
   }
 
@@ -1640,12 +1831,15 @@ export const useDataStore = defineStore("data", () => {
       id: createTemplateId("tpl_layout"),
       name: name || `Layout ${toLocalISODate(new Date())}`,
       tags: Array.isArray(tags) ? tags : [],
-      meals: (day.meals || []).map((m) => ({ name: m.name || m.mealTime || "Meal", time: m.time || "" })),
+      meals: (day.meals || []).map((m) => ({
+        name: m.name || m.mealTime || "Meal",
+        time: m.time || "",
+      })),
       createdAt: Date.now(),
     };
     try {
       const created = await createTemplateOnServer({
-        type: 'layout',
+        type: "layout",
         name: template.name,
         tags: template.tags,
         layoutMeals: template.meals,
@@ -1673,7 +1867,7 @@ export const useDataStore = defineStore("data", () => {
     };
     try {
       const created = await createTemplateOnServer({
-        type: 'day',
+        type: "day",
         name: template.name,
         tags: template.tags,
         meals: template.meals,
@@ -1689,7 +1883,12 @@ export const useDataStore = defineStore("data", () => {
     }
   }
 
-  function applyDayLayoutTemplate(programInstance, dayDate, template, { replace = true } = {}) {
+  function applyDayLayoutTemplate(
+    programInstance,
+    dayDate,
+    template,
+    { replace = true } = {}
+  ) {
     if (!programInstance || !dayDate || !template) return;
     const day = programInstance.days.find((d) => d.date === dayDate);
     if (!day) return;
@@ -1704,7 +1903,12 @@ export const useDataStore = defineStore("data", () => {
     recalcDayTotals(day);
   }
 
-  function applyDayTemplate(programInstance, dayDate, template, { replace = true } = {}) {
+  function applyDayTemplate(
+    programInstance,
+    dayDate,
+    template,
+    { replace = true } = {}
+  ) {
     if (!programInstance || !dayDate || !template) return;
     const day = programInstance.days.find((d) => d.date === dayDate);
     if (!day) return;
@@ -1728,9 +1932,13 @@ export const useDataStore = defineStore("data", () => {
     if (type === "day") {
       dayTemplates.value = dayTemplates.value.filter((t) => t.id !== id);
     } else if (type === "layout") {
-      dayLayoutTemplates.value = dayLayoutTemplates.value.filter((t) => t.id !== id);
+      dayLayoutTemplates.value = dayLayoutTemplates.value.filter(
+        (t) => t.id !== id
+      );
     }
-    try { await deleteTemplateOnServer(id); } catch (e) {}
+    try {
+      await deleteTemplateOnServer(id);
+    } catch (e) {}
     saveTemplatesToStorage();
   }
 
@@ -1739,7 +1947,9 @@ export const useDataStore = defineStore("data", () => {
     const t = list.find((x) => x.id === id);
     if (t) {
       t.name = name || t.name;
-      try { await updateTemplateOnServer(id, { name: t.name }); } catch (e) {}
+      try {
+        await updateTemplateOnServer(id, { name: t.name });
+      } catch (e) {}
       saveTemplatesToStorage();
     }
   }
@@ -1749,7 +1959,9 @@ export const useDataStore = defineStore("data", () => {
     const t = list.find((x) => x.id === id);
     if (t) {
       t.tags = Array.isArray(tags) ? tags : [];
-      try { await updateTemplateOnServer(id, { tags: t.tags }); } catch (e) {}
+      try {
+        await updateTemplateOnServer(id, { tags: t.tags });
+      } catch (e) {}
       saveTemplatesToStorage();
     }
   }
@@ -1777,12 +1989,16 @@ export const useDataStore = defineStore("data", () => {
     }
 
     if (client.programs.length) {
-      const normalised = client.programs.map((program) => ensureProgramStructure(program));
+      const normalised = client.programs.map((program) =>
+        ensureProgramStructure(program)
+      );
       client.programs.splice(0, client.programs.length, ...normalised);
       return normalised[0] || null;
     }
 
-    const placeholder = ensureProgramStructure(createBlankProgram({ clientId }));
+    const placeholder = ensureProgramStructure(
+      createBlankProgram({ clientId })
+    );
     client.programs = [placeholder];
 
     try {
@@ -1793,7 +2009,9 @@ export const useDataStore = defineStore("data", () => {
       return placeholder;
     } catch (error) {
       const message =
-        error.response?.data?.message || error.message || "Failed to save program.";
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to save program.";
       setLastError(message);
       throw error;
     }
@@ -1815,7 +2033,10 @@ export const useDataStore = defineStore("data", () => {
       (programResponse.data || []).forEach((programDoc) => {
         const normalised = normaliseProgram(programDoc);
         const key =
-          normalised?.clientId || programDoc.client || programDoc.clientId || null;
+          normalised?.clientId ||
+          programDoc.client ||
+          programDoc.clientId ||
+          null;
         if (!key) return;
         const id = String(key);
         if (!programsByClient.has(id)) {
@@ -1826,7 +2047,8 @@ export const useDataStore = defineStore("data", () => {
 
       const mapped = (clientResponse.data || []).map((doc) => {
         const id = String(doc._id || doc.id);
-        const existing = clients.value.find((client) => client.id === id) || null;
+        const existing =
+          clients.value.find((client) => client.id === id) || null;
         const enriched = {
           ...doc,
           programs: programsByClient.get(id) || existing?.programs || [],
@@ -1836,16 +2058,23 @@ export const useDataStore = defineStore("data", () => {
 
       clients.value = mapped;
 
-      const needsPrograms = clients.value.filter((client) => !client.programs.length);
+      const needsPrograms = clients.value.filter(
+        (client) => !client.programs.length
+      );
       if (needsPrograms.length) {
         await Promise.all(
-          needsPrograms.map((client) => ensureClientProgram(client.id).catch(() => null))
+          needsPrograms.map((client) =>
+            ensureClientProgram(client.id).catch(() => null)
+          )
         );
       }
 
       return clients.value;
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to load clients.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to load clients.";
       setLastError(message);
       throw error;
     } finally {
@@ -1864,7 +2093,10 @@ export const useDataStore = defineStore("data", () => {
       await ensureClientProgram(normalised.id).catch(() => {});
       return normalised;
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to create client.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to create client.";
       setLastError(message);
       throw error;
     } finally {
@@ -1887,7 +2119,10 @@ export const useDataStore = defineStore("data", () => {
       }
       return updated;
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to update client.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to update client.";
       setLastError(message);
       throw error;
     } finally {
@@ -1903,7 +2138,10 @@ export const useDataStore = defineStore("data", () => {
       await api.delete(`/clients/${clientId}`);
       clients.value = clients.value.filter((client) => client.id !== clientId);
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to delete client.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to delete client.";
       setLastError(message);
       throw error;
     } finally {
@@ -1919,7 +2157,10 @@ export const useDataStore = defineStore("data", () => {
       foods.value = data.map((doc) => normaliseFood(doc));
       return foods.value;
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to load foods.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to load foods.";
       setLastError(message);
       throw error;
     } finally {
@@ -1935,7 +2176,10 @@ export const useDataStore = defineStore("data", () => {
       meals.value = data.map((doc) => normaliseMeal(doc));
       return meals.value;
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to load meals.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to load meals.";
       setLastError(message);
       throw error;
     } finally {
@@ -1953,7 +2197,10 @@ export const useDataStore = defineStore("data", () => {
       meals.value = [normalised, ...meals.value];
       return normalised;
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to create meal.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to create meal.";
       setLastError(message);
       throw error;
     } finally {
@@ -1975,7 +2222,10 @@ export const useDataStore = defineStore("data", () => {
       }
       return updated;
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to update meal.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to update meal.";
       setLastError(message);
       throw error;
     } finally {
@@ -1991,7 +2241,10 @@ export const useDataStore = defineStore("data", () => {
       await api.delete(`/meals/${mealId}`);
       meals.value = meals.value.filter((meal) => meal.id !== mealId);
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to delete meal.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to delete meal.";
       setLastError(message);
       throw error;
     } finally {
@@ -2009,7 +2262,10 @@ export const useDataStore = defineStore("data", () => {
       foods.value = [normalised, ...foods.value];
       return normalised;
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to create food item.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to create food item.";
       setLastError(message);
       throw error;
     } finally {
@@ -2031,7 +2287,10 @@ export const useDataStore = defineStore("data", () => {
       }
       return updated;
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to update food item.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to update food item.";
       setLastError(message);
       throw error;
     } finally {
@@ -2047,7 +2306,10 @@ export const useDataStore = defineStore("data", () => {
       await api.delete(`/fooditems/${foodId}`);
       foods.value = foods.value.filter((food) => food.id !== foodId);
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to delete food item.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to delete food item.";
       setLastError(message);
       throw error;
     } finally {
@@ -2063,7 +2325,10 @@ export const useDataStore = defineStore("data", () => {
       recipes.value = data.map((doc) => normaliseRecipe(doc));
       return recipes.value;
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to load recipes.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to load recipes.";
       setLastError(message);
       throw error;
     } finally {
@@ -2081,7 +2346,10 @@ export const useDataStore = defineStore("data", () => {
       recipes.value = [normalised, ...recipes.value];
       return normalised;
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to create recipe.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to create recipe.";
       setLastError(message);
       throw error;
     } finally {
@@ -2103,7 +2371,10 @@ export const useDataStore = defineStore("data", () => {
       }
       return updated;
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to update recipe.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to update recipe.";
       setLastError(message);
       throw error;
     } finally {
@@ -2119,11 +2390,178 @@ export const useDataStore = defineStore("data", () => {
       await api.delete(`/recipes/${recipeId}`);
       recipes.value = recipes.value.filter((recipe) => recipe.id !== recipeId);
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to delete recipe.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to delete recipe.";
       setLastError(message);
       throw error;
     } finally {
       isLoadingRecipes.value = false;
+    }
+  }
+
+  // Meal Templates
+  async function fetchMealTemplates({ force = false } = {}) {
+    if (!mealTemplateFeatureAvailable.value) {
+      return mealTemplates.value;
+    }
+
+    if (!force && mealTemplates.value.length) {
+      return mealTemplates.value;
+    }
+
+    isLoadingMealTemplates.value = true;
+    setLastError("");
+    try {
+      const { data } = await api.get("/meal-templates");
+      mealTemplates.value = (data || []).map(normaliseMealTemplate);
+      saveMealTemplatesToStorage();
+      return mealTemplates.value;
+    } catch (error) {
+      if (error.response?.status === 404) {
+        // Endpoint not available yet (older backend) – fall back gracefully
+        mealTemplateFeatureAvailable.value = false;
+        mealTemplates.value = mealTemplates.value.length
+          ? mealTemplates.value
+          : [];
+        saveMealTemplatesToStorage();
+        return mealTemplates.value;
+      }
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to load meal templates.";
+      setLastError(message);
+      throw error;
+    } finally {
+      isLoadingMealTemplates.value = false;
+    }
+  }
+
+  async function createMealTemplate(payload) {
+    isLoadingMealTemplates.value = true;
+    setLastError("");
+    try {
+      if (!mealTemplateFeatureAvailable.value) {
+        const template = buildLocalMealTemplate(payload);
+        mealTemplates.value = [template, ...mealTemplates.value];
+        saveMealTemplatesToStorage();
+        return template;
+      }
+
+      const body = serialiseMealTemplate(payload);
+      const { data } = await api.post("/meal-templates", body);
+      const normalised = normaliseMealTemplate(data);
+      mealTemplates.value = [normalised, ...mealTemplates.value];
+      saveMealTemplatesToStorage();
+      return normalised;
+    } catch (error) {
+      if (error.response?.status === 404) {
+        mealTemplateFeatureAvailable.value = false;
+        const template = buildLocalMealTemplate(payload);
+        mealTemplates.value = [template, ...mealTemplates.value];
+        saveMealTemplatesToStorage();
+        return template;
+      }
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to create meal template.";
+      setLastError(message);
+      throw error;
+    } finally {
+      isLoadingMealTemplates.value = false;
+    }
+  }
+
+  async function updateMealTemplate(templateId, payload) {
+    if (!templateId) return null;
+    isLoadingMealTemplates.value = true;
+    setLastError("");
+    try {
+      const index = mealTemplates.value.findIndex(
+        (template) => template.id === templateId
+      );
+      if (index === -1) return null;
+
+      if (!mealTemplateFeatureAvailable.value) {
+        const updatedLocal = buildLocalMealTemplate(
+          payload,
+          mealTemplates.value[index]
+        );
+        mealTemplates.value.splice(index, 1, updatedLocal);
+        saveMealTemplatesToStorage();
+        return updatedLocal;
+      }
+
+      const body = serialiseMealTemplate(payload);
+      const { data } = await api.put(`/meal-templates/${templateId}`, body);
+      const updated = normaliseMealTemplate(data);
+      mealTemplates.value.splice(index, 1, updated);
+      saveMealTemplatesToStorage();
+      return updated;
+    } catch (error) {
+      if (error.response?.status === 404) {
+        mealTemplateFeatureAvailable.value = false;
+        const index = mealTemplates.value.findIndex(
+          (template) => template.id === templateId
+        );
+        if (index === -1) return null;
+        const updatedLocal = buildLocalMealTemplate(
+          payload,
+          mealTemplates.value[index]
+        );
+        mealTemplates.value.splice(index, 1, updatedLocal);
+        saveMealTemplatesToStorage();
+        return updatedLocal;
+      }
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to update meal template.";
+      setLastError(message);
+      throw error;
+    } finally {
+      isLoadingMealTemplates.value = false;
+    }
+  }
+
+  async function deleteMealTemplate(templateId) {
+    if (!templateId) return;
+    isLoadingMealTemplates.value = true;
+    setLastError("");
+    try {
+      if (!mealTemplateFeatureAvailable.value) {
+        mealTemplates.value = mealTemplates.value.filter(
+          (template) => template.id !== templateId
+        );
+        saveMealTemplatesToStorage();
+        return;
+      }
+
+      await api.delete(`/meal-templates/${templateId}`);
+      mealTemplates.value = mealTemplates.value.filter(
+        (template) => template.id !== templateId
+      );
+      saveMealTemplatesToStorage();
+    } catch (error) {
+      if (error.response?.status === 404) {
+        mealTemplateFeatureAvailable.value = false;
+        mealTemplates.value = mealTemplates.value.filter(
+          (template) => template.id !== templateId
+        );
+        saveMealTemplatesToStorage();
+        return;
+      }
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to delete meal template.";
+      setLastError(message);
+      throw error;
+    } finally {
+      isLoadingMealTemplates.value = false;
     }
   }
   async function getProgramByClientId(clientId) {
@@ -2165,7 +2603,9 @@ export const useDataStore = defineStore("data", () => {
     try {
       const saved = await persistProgram(structured);
       if (saved) {
-        const replaceIndex = client.programs.findIndex((p) => p.id === previousId);
+        const replaceIndex = client.programs.findIndex(
+          (p) => p.id === previousId
+        );
         if (replaceIndex !== -1) {
           client.programs.splice(replaceIndex, 1, saved);
         } else {
@@ -2177,22 +2617,46 @@ export const useDataStore = defineStore("data", () => {
       return structured;
     } catch (error) {
       const message =
-        error.response?.data?.message || error.message || "Failed to save program.";
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to save program.";
       setLastError(message);
       throw error;
     }
   }
 
   function createMeal(payload = {}) {
-    return toMeal({
+    const meal = toMeal({
+      id: payload.id || createId("meal"),
+      ...payload,
+    });
+
+    const sourceItems = Array.isArray(payload.items)
+      ? payload.items
+      : meal.items;
+
+    meal.items = sourceItems
+      .map((item) => (item ? createMealItem(item) : null))
+      .filter(Boolean);
+
+    recalcMealTotals(meal);
+    return meal;
+  }
+
+  function createMealFromTemplate(template) {
+    const meal = toMeal({
       id: createId("meal"),
-      name: payload.name || "Meal",
-      mealTime: payload.name || payload.mealTime,
-      time: payload.time || "",
-      items: [],
-      macros: createMacroTotals(),
+      name: template.meal.name || "Meal",
+      mealTime: template.meal.name || "Meal",
+      time: template.meal.time || "",
+      items: (template.meal.items || []).map((item) => toMealItem(item)),
+      macros: createMacroTotals(template.meal.macros),
       macrosSource: "auto",
     });
+
+    // Recalculate totals
+    recalcMealTotals(meal);
+    return meal;
   }
 
   function createMealItem(payload = {}) {
@@ -2276,7 +2740,11 @@ export const useDataStore = defineStore("data", () => {
 
   function ensureProgramIncludesDate(programInstance, isoDate) {
     if (!programInstance || !isoDate) return;
-    if (!Array.isArray(programInstance.days) || programInstance.days.length === 0) return;
+    if (
+      !Array.isArray(programInstance.days) ||
+      programInstance.days.length === 0
+    )
+      return;
     const firstIso = programInstance.days[0].date;
     const lastIso = programInstance.days[programInstance.days.length - 1].date;
     let first = parseLocalISO(firstIso);
@@ -2288,7 +2756,12 @@ export const useDataStore = defineStore("data", () => {
       first.setDate(first.getDate() - 1);
       const newIso = toLocalISODate(first);
       programInstance.days.unshift(
-        toDay({ date: newIso, meals: [], macros: createMacroTotals(), macrosSource: "auto" })
+        toDay({
+          date: newIso,
+          meals: [],
+          macros: createMacroTotals(),
+          macrosSource: "auto",
+        })
       );
     }
     // Extend forwards
@@ -2296,7 +2769,12 @@ export const useDataStore = defineStore("data", () => {
       last.setDate(last.getDate() + 1);
       const newIso = toLocalISODate(last);
       programInstance.days.push(
-        toDay({ date: newIso, meals: [], macros: createMacroTotals(), macrosSource: "auto" })
+        toDay({
+          date: newIso,
+          meals: [],
+          macros: createMacroTotals(),
+          macrosSource: "auto",
+        })
       );
     }
   }
@@ -2359,13 +2837,19 @@ export const useDataStore = defineStore("data", () => {
     updateFood,
     deleteFood,
     fetchMeals,
-    createMealTemplate,
-    updateMealTemplate,
-    deleteMealTemplate,
     fetchRecipes,
     createRecipe,
     updateRecipe,
     deleteRecipe,
+
+    // meal templates
+    mealTemplates,
+    isLoadingMealTemplates,
+    mealTemplateFeatureAvailable,
+    fetchMealTemplates,
+    createMealTemplate,
+    updateMealTemplate,
+    deleteMealTemplate,
 
     // programs
     getProgramByClientId,
@@ -2375,6 +2859,7 @@ export const useDataStore = defineStore("data", () => {
     updateMeal,
     ensureProgramIncludesDate,
     createMeal,
+    createMealFromTemplate,
     attachItemToMeal,
     removeItemFromMeal,
     duplicateMealItems,
