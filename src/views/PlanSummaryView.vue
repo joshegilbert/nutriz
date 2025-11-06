@@ -246,6 +246,7 @@ import { useRoute } from 'vue-router';
 import { useDataStore } from '@/stores/useDataStore';
 import { storeToRefs } from 'pinia';
 import { addDays, format, parseISO } from 'date-fns';
+import { generateMealPlanPDF } from '@/utils/pdfGenerator';
 
 const route = useRoute();
 const store = useDataStore();
@@ -501,265 +502,28 @@ async function downloadPdf() {
   exportingPdf.value = true;
 
   try {
-    const lines = buildPdfLines();
-    const pdfBlob = createPdfBlob(lines);
-    const link = document.createElement('a');
+    const doc = generateMealPlanPDF({
+      client: client.value,
+      program: program.value,
+      planSummary: planSummary.value,
+      shoppingListItems: shoppingListItems.value,
+      lookupName: lookupName,
+    });
+
     const safeName = (client.value?.name || 'client')
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)/g, '') || 'client';
-    link.href = URL.createObjectURL(pdfBlob);
-    link.download = `${safeName || 'client'}-plan-summary.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(link.href);
+    
+    doc.save(`${safeName}-plan-summary.pdf`);
   } catch (error) {
     pdfError.value = error?.message || 'Failed to generate PDF.';
+    console.error('PDF generation error:', error);
   } finally {
     exportingPdf.value = false;
   }
 }
 
-function buildPdfLines() {
-  const lines = [];
-  const now = new Date();
-  lines.push(`Plan Summary for ${client.value?.name || 'Client'}`);
-  lines.push(`Generated: ${format(now, 'PPpp')}`);
-  pushDivider(lines, '=');
-
-  pushSectionHeading(lines, 'Plan Overview');
-  pushDivider(lines, '-');
-  if (planSummary.value) {
-    lines.push(`Start: ${planSummary.value.startLabel}`);
-    lines.push(`End: ${planSummary.value.endLabel}`);
-    lines.push(`Length: ${planSummary.value.lengthLabel}`);
-    lines.push(`Meals Planned: ${formatCountLabel(planSummary.value.totalMeals, 'meal')}`);
-    lines.push(`Meal Items: ${formatCountLabel(planSummary.value.totalItems, 'item')}`);
-    lines.push(`Shopping List Items: ${formatCountLabel(shoppingListItems.value.length, 'item')}`);
-  } else {
-    lines.push('Overview details are not available for this plan.');
-  }
-  lines.push('');
-
-  pushSectionHeading(lines, 'Meal Plan');
-  pushDivider(lines, '-');
-
-  const days = program.value?.days || [];
-  if (!days.length) {
-    lines.push('No days found in this plan.');
-  } else {
-    days.forEach((day, dayIndex) => {
-      const dayLabel = formatDayLabel(day.date);
-      const dayDetails = [];
-      dayDetails.push(formatCountLabel(day?.meals?.length || 0, 'meal'));
-      const dayMacro = formatMacroSummary(day?.macros);
-      if (dayMacro) {
-        dayDetails.push(dayMacro);
-      }
-
-      lines.push(`${dayLabel}`);
-      lines.push(`${dayDetails.join(' · ')}`);
-
-      if (!day?.meals?.length) {
-        lines.push('No meals planned for this day.');
-      } else {
-        day.meals.forEach((meal, mealIndex) => {
-          const mealName = meal.mealTime || meal.name || 'Meal';
-          const itemCount = meal?.items?.length || 0;
-          const itemSummary = itemCount
-            ? pluralize(itemCount, 'item')
-            : 'No items yet';
-          lines.push(`  ${mealIndex + 1}. ${mealName} — ${itemSummary}`);
-
-          const mealMacro = formatMacroSummary(meal?.macros);
-          if (mealMacro) {
-            lines.push(`     Macros: ${mealMacro}`);
-          }
-
-          if (!itemCount) {
-            lines.push('     No specific items listed for this meal yet.');
-          } else {
-            meal.items.forEach((item) => {
-              lines.push(`     • ${formatMealItemForPdf(item)}`);
-            });
-          }
-        });
-      }
-
-      if (dayIndex < days.length - 1) {
-        lines.push('');
-      }
-    });
-  }
-
-  lines.push('');
-  pushSectionHeading(lines, 'Shopping List');
-  pushDivider(lines, '-');
-
-  if (!shoppingListItems.value.length) {
-    lines.push('No ingredients listed for this plan.');
-  } else {
-    shoppingListItems.value.forEach((item, index) => {
-      lines.push(`${index + 1}. ${item.name}`);
-      const amount = formatShoppingAmount(item);
-      if (amount && amount !== '—') {
-        lines.push(`   Amount: ${amount}`);
-      }
-      if (item.notes.length) {
-        lines.push(`   Notes: ${item.notes.join('; ')}`);
-      } else if (item.textual.length && item.total === null) {
-        lines.push(`   Notes: ${item.textual.join(', ')}`);
-      }
-      if (index < shoppingListItems.value.length - 1) {
-        lines.push('');
-      }
-    });
-  }
-
-  lines.push('');
-  pushSectionHeading(lines, 'Notes for the Client');
-  pushDivider(lines, '-');
-  const notesText = String(client.value?.notes || '').trim();
-  if (!notesText) {
-    lines.push('No notes provided.');
-  } else {
-    for (const paragraph of notesText.split(/\r?\n/)) {
-      lines.push(paragraph);
-    }
-  }
-
-  return lines;
-}
-
-function createPdfBlob(lines) {
-  const wrappedLines = lines.flatMap((line) => wrapLine(line ?? '', 96));
-  const linesPerPage = 45;
-  const pages = [];
-  let currentPage = [];
-
-  for (const line of wrappedLines) {
-    if (currentPage.length >= linesPerPage) {
-      pages.push(currentPage);
-      currentPage = [];
-    }
-    currentPage.push(line);
-  }
-  if (currentPage.length || !pages.length) {
-    pages.push(currentPage);
-  }
-
-  const catalogId = 1;
-  const pagesId = 2;
-  const fontId = 3;
-
-  const objects = [];
-  objects.push({ id: catalogId, body: `<< /Type /Catalog /Pages ${pagesId} 0 R >>` });
-  const kidsRefs = pages
-    .map((_, index) => `${4 + index * 2} 0 R`)
-    .join(' ');
-  objects.push({
-    id: pagesId,
-    body: `<< /Type /Pages /Count ${pages.length} /Kids [${kidsRefs}] >>`,
-  });
-  objects.push({
-    id: fontId,
-    body: '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
-  });
-
-  pages.forEach((pageLines, index) => {
-    const pageObjId = 4 + index * 2;
-    const contentObjId = pageObjId + 1;
-    const instructions = [];
-    instructions.push('BT');
-    instructions.push('/F1 12 Tf');
-    instructions.push('14 TL');
-    instructions.push('72 720 Td');
-
-    pageLines.forEach((line, lineIndex) => {
-      const safeLine = escapePdfString(line);
-      if (lineIndex === 0) {
-        instructions.push(`(${safeLine}) Tj`);
-      } else {
-        instructions.push('T*');
-        instructions.push(`(${safeLine}) Tj`);
-      }
-    });
-
-    instructions.push('ET');
-    const contentStream = instructions.join('\n');
-
-    objects.push({
-      id: pageObjId,
-      body: `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentObjId} 0 R >>`,
-    });
-    objects.push({
-      id: contentObjId,
-      body: `<< /Length ${contentStream.length} >>\nstream\n${contentStream}\nendstream`,
-    });
-  });
-
-  const sortedObjects = objects.sort((a, b) => a.id - b.id);
-  let pdfString = '%PDF-1.4\n';
-  const offsets = {};
-  let currentOffset = pdfString.length;
-
-  sortedObjects.forEach((object) => {
-    offsets[object.id] = currentOffset;
-    const objectString = `${object.id} 0 obj\n${object.body}\nendobj\n`;
-    pdfString += objectString;
-    currentOffset += objectString.length;
-  });
-
-  const xrefOffset = pdfString.length;
-  const totalObjects = sortedObjects.length + 1;
-  let xref = `xref\n0 ${totalObjects}\n0000000000 65535 f \n`;
-  sortedObjects.forEach((object) => {
-    xref += `${String(offsets[object.id]).padStart(10, '0')} 00000 n \n`;
-  });
-
-  const trailer = `trailer\n<< /Size ${totalObjects} /Root ${catalogId} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
-  pdfString += xref + trailer;
-
-  return new Blob([pdfString], { type: 'application/pdf' });
-}
-
-function wrapLine(line, maxLength) {
-  if (!line) return [''];
-  const indentMatch = line.match(/^(\s*)/);
-  const indent = indentMatch ? indentMatch[1] : '';
-  const content = line.slice(indent.length);
-  if (!content) return [indent];
-  const words = content.split(/\s+/).filter(Boolean);
-  if (!words.length) return [indent];
-
-  const result = [];
-  let current = indent;
-
-  for (const word of words) {
-    const tentative =
-      current === indent ? `${indent}${word}` : `${current} ${word}`;
-    if (tentative.length > maxLength && current !== indent) {
-      result.push(current);
-      current = `${indent}${word}`;
-    } else {
-      current = tentative;
-    }
-  }
-
-  if (current) {
-    result.push(current);
-  }
-
-  return result;
-}
-
-function escapePdfString(value) {
-  return String(value || '')
-    .replace(/\\/g, '\\\\')
-    .replace(/\(/g, '\\(')
-    .replace(/\)/g, '\\)');
-}
 
 function parseIsoSafe(value) {
   if (!value) return null;
@@ -770,55 +534,6 @@ function parseIsoSafe(value) {
   }
 }
 
-function pushSectionHeading(target, label) {
-  target.push(label.toUpperCase());
-}
-
-function pushDivider(target, char = '-') {
-  target.push(char.repeat(40));
-}
-
-function formatMacroSummary(macros) {
-  if (!macros) return '';
-  const parts = [];
-  const calories = Number(macros.calories);
-  const protein = Number(macros.protein);
-  const carbs = Number(macros.carbs);
-  const fat = Number(macros.fat);
-
-  if (Number.isFinite(calories) && calories > 0) {
-    parts.push(`${formatNumber(calories)} kcal`);
-  }
-  if (Number.isFinite(protein) && protein > 0) {
-    parts.push(`${formatNumber(protein)}g protein`);
-  }
-  if (Number.isFinite(carbs) && carbs > 0) {
-    parts.push(`${formatNumber(carbs)}g carbs`);
-  }
-  if (Number.isFinite(fat) && fat > 0) {
-    parts.push(`${formatNumber(fat)}g fat`);
-  }
-
-  return parts.join(', ');
-}
-
-function formatMealItemForPdf(item) {
-  const name = (item?.name || lookupName(item) || 'Item').trim() || 'Item';
-  const amountLabel = formatAmountLabel(item);
-  const notes = String(item?.notes || '').trim();
-  const parts = [name];
-  if (amountLabel) parts.push(`(${amountLabel})`);
-  if (notes) parts.push(`- ${notes}`);
-  return parts.join(' ');
-}
-
-function formatCountLabel(count, noun) {
-  const numeric = Number(count);
-  if (!Number.isFinite(numeric) || numeric <= 0) {
-    return `No ${noun}${noun.endsWith('s') ? '' : 's'}`;
-  }
-  return pluralize(numeric, noun);
-}
 </script>
 
 <style scoped>

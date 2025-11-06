@@ -1031,6 +1031,7 @@ export const useDataStore = defineStore("data", () => {
       state: document?.state ?? existing.state ?? "",
       goals: document?.goals ?? existing.goals ?? [],
       notes: document?.notes ?? existing.notes ?? "",
+      measurementPreference: document?.measurementPreference ?? existing.measurementPreference ?? "metric",
       last_active: createdIso,
       programs: programSource,
       raw: document || existing.raw || null,
@@ -1045,6 +1046,7 @@ export const useDataStore = defineStore("data", () => {
       gender: payload.gender || undefined,
       weight: payload.weight ?? undefined,
       state: payload.state || undefined,
+      measurementPreference: payload.measurementPreference || undefined,
       lastActive: payload.last_active || payload.lastActive || undefined,
       contact: {
         email: payload.email || "",

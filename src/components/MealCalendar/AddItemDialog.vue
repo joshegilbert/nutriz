@@ -60,11 +60,13 @@
                   <div v-if="selectedItem?.type === 'food'" class="mt-2">
                     <v-select
                       v-model="selectedServing"
-                      :items="(store.getItemDetails('food', selectedItem?.id)?.servings || []).map(s => s.label)"
-                      label="Serving"
+                      :items="getServingOptions(selectedItem)"
+                      label="Serving Size"
                       density="compact"
                       clearable
                       hide-details
+                      hint="Select a serving size or enter custom amount below"
+                      persistent-hint
                     />
                   </div>
                 </v-window-item>
@@ -198,6 +200,7 @@
 <script setup>
 import { ref, reactive, computed, watch } from "vue";
 import { useDataStore } from "@/stores/useDataStore";
+import { getSuggestedUnits } from "@/utils/unitConverter";
 
 const store = useDataStore();
 const props = defineProps({
@@ -342,9 +345,31 @@ function calcFoodMacros(food, amount, unitLabel) {
   return store.calculateItemMacros('food', food.id, amount || 1);
 }
 
+function getServingOptions(item) {
+  if (!item || item.type !== 'food') return [];
+  
+  const food = store.getItemDetails('food', item.id);
+  if (!food) return [];
+  
+  // Get existing servings
+  const existingServings = (food.servings || []).map(s => s.label).filter(Boolean);
+  
+  // Get suggested units based on category
+  const suggested = getSuggestedUnits(food.category || '');
+  const suggestedLabels = suggested.map(u => {
+    // Format: "1 cup" or "1 oz"
+    return `1 ${u.label}`;
+  });
+  
+  // Combine and deduplicate
+  const all = [...existingServings, ...suggestedLabels];
+  return [...new Set(all)];
+}
+
 function closeDialog() {
   localModel.value = false;
   selectedItem.value = null;
+  selectedServing.value = '';
   customName.value = "";
   quantity.value = 1;
   showOverrides.value = false;

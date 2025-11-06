@@ -50,15 +50,25 @@
     <v-divider class="mb-3" />
 
     <!-- Days List (Mon–Sun) -->
-    <div class="day-list">
-      <v-sheet
-        v-for="day in visibleDays"
-        :key="day.date"
-        class="day-block rounded-lg pa-3 mb-3"
-        :class="{ active: selectedDate?.date === day.date }"
-        @click="$emit('selectDay', day)"
-        elevation="0"
-      >
+    <draggable
+      v-model="draggableDays"
+      class="day-list"
+      item-key="date"
+      @end="onDragEnd"
+      handle=".drag-handle"
+      :animation="200"
+    >
+      <template #item="{ element: day }">
+        <v-sheet
+          :key="day.date"
+          class="day-block rounded-lg pa-3 mb-3"
+          :class="{ active: selectedDate?.date === day.date }"
+          @click="$emit('selectDay', day)"
+          elevation="0"
+        >
+          <div class="drag-handle" style="cursor: move; position: absolute; top: 8px; right: 8px; opacity: 0.5;">
+            <v-icon size="small">mdi-drag</v-icon>
+          </div>
         <div class="d-flex justify-space-between align-center mb-1">
           <div class="day-info">
             <div class="day-name">
@@ -89,8 +99,9 @@
           <v-spacer />
           <span class="items">{{ (day.meals || []).length }} meals</span>
         </div>
-      </v-sheet>
-    </div>
+        </v-sheet>
+      </template>
+    </draggable>
 
     
     
@@ -131,6 +142,7 @@
 <script setup>
 import { ref, computed, watch } from "vue";
 import { format, addDays, startOfWeek } from "date-fns";
+import draggable from "vuedraggable";
 
 const props = defineProps({
   program: { type: Object, required: true },
@@ -161,6 +173,14 @@ const visibleDays = computed(() => {
     );
   });
   return list;
+});
+
+// Draggable days - reactive copy for drag-and-drop
+const draggableDays = computed({
+  get: () => visibleDays.value,
+  set: (newValue) => {
+    // This will be handled by onDragEnd
+  }
 });
 
 // Weekly averages across visible days
@@ -232,6 +252,72 @@ function pasteDay() {
     JSON.stringify(clipboardDay.value.macros)
   );
 
+  emit("updateProgram", props.program);
+}
+
+// Drag and drop handler - moves day content and shifts others
+function onDragEnd(event) {
+  const { oldIndex, newIndex } = event;
+  if (oldIndex === newIndex) return;
+
+  const weekDayDates = weekDates.value.map(d => format(d, "yyyy-MM-dd"));
+  const allDays = [...(props.program?.days || [])];
+  
+  // Get source day (the one being dragged)
+  const sourceDate = weekDayDates[oldIndex];
+  const targetDate = weekDayDates[newIndex];
+  
+  // Find or create day objects for all week dates
+  const weekDays = weekDayDates.map(date => {
+    const existing = allDays.find(d => d.date === date);
+    if (existing) return existing;
+    // Create empty day if it doesn't exist
+    return {
+      date,
+      meals: [],
+      macros: { calories: 0, protein: 0, carbs: 0, fat: 0 },
+      macrosSource: "auto",
+      activeVariant: 'A'
+    };
+  });
+
+  // Get the source day's content
+  const sourceDayContent = JSON.parse(JSON.stringify(weekDays[oldIndex]));
+
+  // Shift days between old and new position
+  if (oldIndex < newIndex) {
+    // Moving down: shift days up
+    for (let i = oldIndex; i < newIndex; i++) {
+      weekDays[i].meals = JSON.parse(JSON.stringify(weekDays[i + 1].meals));
+      weekDays[i].macros = JSON.parse(JSON.stringify(weekDays[i + 1].macros));
+      weekDays[i].activeVariant = weekDays[i + 1].activeVariant || 'A';
+    }
+  } else {
+    // Moving up: shift days down
+    for (let i = oldIndex; i > newIndex; i--) {
+      weekDays[i].meals = JSON.parse(JSON.stringify(weekDays[i - 1].meals));
+      weekDays[i].macros = JSON.parse(JSON.stringify(weekDays[i - 1].macros));
+      weekDays[i].activeVariant = weekDays[i - 1].activeVariant || 'A';
+    }
+  }
+
+  // Place source content at target position
+  weekDays[newIndex].meals = sourceDayContent.meals;
+  weekDays[newIndex].macros = sourceDayContent.macros;
+  weekDays[newIndex].activeVariant = sourceDayContent.activeVariant || 'A';
+
+  // Update program days - merge with existing days outside the week
+  const updatedDays = [...allDays];
+  weekDays.forEach(weekDay => {
+    const existingIndex = updatedDays.findIndex(d => d.date === weekDay.date);
+    if (existingIndex >= 0) {
+      updatedDays[existingIndex] = weekDay;
+    } else {
+      updatedDays.push(weekDay);
+    }
+  });
+
+  props.program.days = updatedDays;
   emit("updateProgram", props.program);
 }
 
@@ -307,6 +393,7 @@ watch(
   border: 1px solid #eee;
   transition: all 0.2s ease;
   cursor: pointer;
+  position: relative;
 }
 
 .day-block:hover {

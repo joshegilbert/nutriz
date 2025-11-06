@@ -35,6 +35,38 @@
       </div>
     </div>
 
+    <!-- Selection Controls -->
+    <div v-if="getSelectedIndices.length > 0" class="selection-controls mb-2">
+      <v-chip color="primary" variant="tonal" class="mr-2">
+        {{ getSelectedIndices.length }} day{{ getSelectedIndices.length !== 1 ? 's' : '' }} selected
+      </v-chip>
+      <v-btn
+        size="small"
+        variant="text"
+        prepend-icon="mdi-content-copy"
+        @click="copySelectedDays"
+      >
+        Copy
+      </v-btn>
+      <v-btn
+        size="small"
+        variant="text"
+        prepend-icon="mdi-content-paste"
+        :disabled="!clipboardDays.length"
+        @click="showPasteDialog = true"
+      >
+        Paste
+      </v-btn>
+      <v-btn
+        size="small"
+        variant="text"
+        prepend-icon="mdi-close"
+        @click="clearSelection"
+      >
+        Clear
+      </v-btn>
+    </div>
+
     <!-- Calendar Grid -->
     <div class="calendar-grid">
       <div
@@ -44,8 +76,15 @@
         :class="{
           'current-month': day.isCurrentMonth,
           today: day.isToday,
+          selected: isSelected(idx),
+          'drag-over': dragOverIndex === idx,
         }"
-        @click="emit('open-week', day.date)"
+        :draggable="day.isCurrentMonth && day.programDay"
+        @dragstart="onDragStart($event, idx)"
+        @dragover.prevent="onDragOver($event, idx)"
+        @dragleave="onDragLeave"
+        @drop="onDrop($event, idx)"
+        @click="handleCellClick($event, idx, day)"
       >
         <div class="cell-header">
           <span class="date" :class="{ 'text-primary': day.isToday }">
@@ -139,11 +178,26 @@
         </div>
       </div>
     </div>
+
+    <!-- Paste Dialog -->
+    <v-dialog v-model="showPasteDialog" max-width="400">
+      <v-card>
+        <v-card-title>Paste to Selected Days?</v-card-title>
+        <v-card-text>
+          This will replace the content of {{ getSelectedIndices.length }} day{{ getSelectedIndices.length !== 1 ? 's' : '' }} with the copied content.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="showPasteDialog = false">Cancel</v-btn>
+          <v-btn color="primary" variant="text" @click="pasteToSelectedDays">Paste</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useDataStore } from "@/stores/useDataStore";
 import { storeToRefs } from "pinia";
 import {
@@ -156,8 +210,15 @@ import {
   isSameMonth,
   isToday,
 } from "date-fns";
+import { useSelection } from "@/composables/useSelection";
 
-const emit = defineEmits(["open-week"]);
+const emit = defineEmits(["open-week", "updateProgram"]);
+
+const { isSelected, toggleSelection, clearSelection, getSelectedIndices } = useSelection();
+const dragOverIndex = ref(null);
+const draggedIndex = ref(null);
+const clipboardDays = ref([]);
+const showPasteDialog = ref(false);
 
 const props = defineProps({
   clientId: { type: Number, required: true },
@@ -215,6 +276,168 @@ function truncateNotes(notes) {
   if (!notes) return "";
   return notes.length > 100 ? notes.substring(0, 100) + "..." : notes;
 }
+
+// Selection and drag-and-drop handlers
+function handleCellClick(event, idx, day) {
+  // Don't open week view if selecting
+  if (event.ctrlKey || event.metaKey || event.shiftKey) {
+    event.stopPropagation();
+    toggleSelection(idx, event);
+  } else if (getSelectedIndices.value.length === 0) {
+    // Normal click - open week view
+    emit('open-week', day.date);
+  } else {
+    // Click with selection - toggle selection
+    toggleSelection(idx, event);
+  }
+}
+
+function onDragStart(event, idx) {
+  draggedIndex.value = idx;
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', idx.toString());
+}
+
+function onDragOver(event, idx) {
+  if (draggedIndex.value !== null && draggedIndex.value !== idx) {
+    dragOverIndex.value = idx;
+    event.dataTransfer.dropEffect = 'move';
+  }
+}
+
+function onDragLeave() {
+  dragOverIndex.value = null;
+}
+
+function onDrop(event, targetIdx) {
+  event.preventDefault();
+  dragOverIndex.value = null;
+
+  if (draggedIndex.value === null || draggedIndex.value === targetIdx) {
+    draggedIndex.value = null;
+    return;
+  }
+
+  const sourceDay = calendarDays.value[draggedIndex.value];
+  const targetDay = calendarDays.value[targetIdx];
+
+  if (!sourceDay.programDay || !targetDay.isCurrentMonth) {
+    draggedIndex.value = null;
+    return;
+  }
+
+  // Move day content
+  const sourceDate = format(sourceDay.date, 'yyyy-MM-dd');
+  const targetDate = format(targetDay.date, 'yyyy-MM-dd');
+
+  const allDays = [...(program.value?.days || [])];
+  
+  // Find or create target day
+  let targetDayObj = allDays.find(d => d.date === targetDate);
+  if (!targetDayObj) {
+    targetDayObj = {
+      date: targetDate,
+      meals: [],
+      macros: { calories: 0, protein: 0, carbs: 0, fat: 0 },
+      macrosSource: 'auto',
+      activeVariant: 'A',
+    };
+    allDays.push(targetDayObj);
+  }
+
+  // Copy source content to target
+  const sourceDayObj = allDays.find(d => d.date === sourceDate);
+  if (sourceDayObj) {
+    targetDayObj.meals = JSON.parse(JSON.stringify(sourceDayObj.meals));
+    targetDayObj.macros = JSON.parse(JSON.stringify(sourceDayObj.macros));
+    targetDayObj.activeVariant = sourceDayObj.activeVariant || 'A';
+  }
+
+  // Update program
+  program.value.days = allDays;
+  emit('updateProgram', program.value);
+  
+  draggedIndex.value = null;
+}
+
+function copySelectedDays() {
+  const selected = getSelectedIndices.value
+    .map(idx => calendarDays.value[idx])
+    .filter(day => day.isCurrentMonth && day.programDay)
+    .map(day => {
+      const dayObj = program.value?.days.find(d => d.date === format(day.date, 'yyyy-MM-dd'));
+      return dayObj ? JSON.parse(JSON.stringify(dayObj)) : null;
+    })
+    .filter(Boolean);
+
+  clipboardDays.value = selected;
+}
+
+function pasteToSelectedDays() {
+  if (!clipboardDays.value.length) return;
+
+  const allDays = [...(program.value?.days || [])];
+  const sourceDay = clipboardDays.value[0]; // Use first copied day
+
+  getSelectedIndices.value.forEach(idx => {
+    const targetDay = calendarDays.value[idx];
+    if (!targetDay.isCurrentMonth) return;
+
+    const targetDate = format(targetDay.date, 'yyyy-MM-dd');
+    let targetDayObj = allDays.find(d => d.date === targetDate);
+    
+    if (!targetDayObj) {
+      targetDayObj = {
+        date: targetDate,
+        meals: [],
+        macros: { calories: 0, protein: 0, carbs: 0, fat: 0 },
+        macrosSource: 'auto',
+        activeVariant: 'A',
+      };
+      allDays.push(targetDayObj);
+    }
+
+    // Paste content
+    targetDayObj.meals = JSON.parse(JSON.stringify(sourceDay.meals));
+    targetDayObj.macros = JSON.parse(JSON.stringify(sourceDay.macros));
+    targetDayObj.activeVariant = sourceDay.activeVariant || 'A';
+  });
+
+  program.value.days = allDays;
+  emit('updateProgram', program.value);
+  showPasteDialog.value = false;
+  clearSelection();
+}
+
+// Keyboard shortcuts
+function handleKeyDown(event) {
+  if (event.key === 'Escape') {
+    clearSelection();
+  } else if (event.key === 'a' && (event.ctrlKey || event.metaKey)) {
+    event.preventDefault();
+    // Select all current month days
+    const currentMonthDays = calendarDays.value
+      .map((day, idx) => day.isCurrentMonth ? idx : -1)
+      .filter(idx => idx >= 0);
+    currentMonthDays.forEach(idx => toggleSelection(idx));
+  } else if (event.key === 'c' && (event.ctrlKey || event.metaKey) && getSelectedIndices.value.length > 0) {
+    event.preventDefault();
+    copySelectedDays();
+  } else if (event.key === 'v' && (event.ctrlKey || event.metaKey) && clipboardDays.value.length > 0) {
+    event.preventDefault();
+    if (getSelectedIndices.value.length > 0) {
+      showPasteDialog.value = true;
+    }
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeyDown);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyDown);
+});
 </script>
 
 <style scoped>
@@ -271,6 +494,26 @@ function truncateNotes(notes) {
   flex-direction: column;
   justify-content: space-between;
   transition: all 0.2s ease;
+  position: relative;
+}
+
+.calendar-cell.selected {
+  border: 2px solid #1976d2;
+  background-color: #e3f2fd;
+}
+
+.calendar-cell.drag-over {
+  border: 2px dashed #1976d2;
+  background-color: #bbdefb;
+}
+
+.selection-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: #f5f5f5;
+  border-radius: 8px;
 }
 
 .calendar-cell:hover {
