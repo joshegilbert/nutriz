@@ -41,6 +41,11 @@ const ClientSchema = new mongoose.Schema({
         default: []
     },
     notes: String,
+    measurementPreference: {
+        type: String,
+        enum: ['metric', 'imperial'],
+        default: 'metric'
+    },
     createdAt: {
         type: Date,
         default: Date.now

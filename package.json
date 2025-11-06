@@ -15,11 +15,13 @@
   "description": "",
   "dependencies": {
     "@mdi/font": "^7.4.47",
-    "date-fns": "^4.1.0",
     "axios": "^1.7.7",
+    "date-fns": "^4.1.0",
+    "jspdf": "^3.0.3",
     "pinia": "^3.0.3",
     "vue": "^3.5.21",
     "vue-router": "^4.5.1",
+    "vuedraggable": "^4.1.0",
     "vuetify": "^3.10.2"
   },
   "devDependencies": {

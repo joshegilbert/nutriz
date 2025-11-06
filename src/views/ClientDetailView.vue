@@ -183,6 +183,12 @@
                         {{ personalInfo.state }}
                       </v-list-item-subtitle>
                     </v-list-item>
+                    <v-list-item>
+                      <v-list-item-title>Measurement Preference</v-list-item-title>
+                      <v-list-item-subtitle>
+                        {{ client?.measurementPreference === 'imperial' ? 'Imperial (cups, oz)' : 'Metric (grams, ml)' }}
+                      </v-list-item-subtitle>
+                    </v-list-item>
                   </v-list>
                   <div class="text-right mt-4">
                     <v-btn
@@ -337,6 +343,16 @@
                         clearable
                       />
                     </v-col>
+                    <v-col cols="12" md="6">
+                      <v-select
+                        v-model="editModel.measurementPreference"
+                        :items="measurementOptions"
+                        label="Measurement Preference"
+                        hint="Preferred units for displaying food amounts"
+                        persistent-hint
+                        hide-details="auto"
+                      />
+                    </v-col>
                   </v-row>
                 </template>
 
@@ -414,6 +430,7 @@
             :client-id="client.id"
             :program-id="client.programs[0].id"
             @open-week="openWeekView"
+            @update-program="handleProgramUpdate"
           />
         </v-col>
       </v-row>
@@ -451,6 +468,10 @@ const selectedDate = ref(new Date());
 
 const statusOptions = ["Active", "Pending", "On Hold", "Inactive"];
 const genderOptions = ["Male", "Female"];
+const measurementOptions = [
+  { title: "Metric (grams, ml)", value: "metric" },
+  { title: "Imperial (cups, oz)", value: "imperial" },
+];
 const stateOptions = [
   "Alabama",
   "Alaska",
@@ -886,6 +907,7 @@ async function openEditDialog(section) {
       gender: client.value.gender ?? "",
       weight: client.value.weight ?? "",
       state: client.value.state ?? "",
+      measurementPreference: client.value.measurementPreference ?? "metric",
     };
   } else if (section === "contact") {
     editModel.value = {
@@ -1021,12 +1043,14 @@ async function saveEdit() {
 
       target.gender = editModel.value.gender || "";
       target.state = editModel.value.state || "";
+      target.measurementPreference = editModel.value.measurementPreference || "metric";
       try {
         await dataStore.updateClient(target.id, {
           age: target.age,
           gender: target.gender,
           weight: target.weight,
           state: target.state,
+          measurementPreference: target.measurementPreference,
         });
       } catch (e) {
         console.error("Failed to update personal info:", e);
@@ -1068,6 +1092,15 @@ async function saveEdit() {
 function openWeekView(date) {
   selectedDate.value = new Date(date);
   viewMode.value = "week";
+}
+
+async function handleProgramUpdate(updatedProgram) {
+  if (!client.value) return;
+  try {
+    await dataStore.updateProgram(updatedProgram);
+  } catch (error) {
+    console.error("Failed to update program:", error);
+  }
 }
 
 function formatDateDisplay(date) {
