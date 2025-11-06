@@ -87,6 +87,9 @@
             @click="addFoodItem(food)"
             :class="{ active: selectedIndex === getFoodIndex(index) }"
           >
+            <template #prepend>
+              <v-icon color="orange">mdi-food</v-icon>
+            </template>
             <v-list-item-title>
               {{ food.brand }} {{ food.name }}
             </v-list-item-title>
@@ -108,11 +111,15 @@
             @click="addRecipeItem(recipe)"
             :class="{ active: selectedIndex === getRecipeIndex(index) }"
           >
+            <template #prepend>
+              <v-icon color="blue">mdi-book-open</v-icon>
+            </template>
             <v-list-item-title>{{ recipe.name }}</v-list-item-title>
             <v-list-item-subtitle>
-              {{ recipe.totalMacros.calories }} cal •
-              {{ recipe.totalMacros.protein }}P /
-              {{ recipe.totalMacros.carbs }}C / {{ recipe.totalMacros.fat }}F
+              {{ (recipe.totalMacros || {}).calories || 0 }} cal •
+              {{ (recipe.totalMacros || {}).protein || 0 }}P /
+              {{ (recipe.totalMacros || {}).carbs || 0 }}C / 
+              {{ (recipe.totalMacros || {}).fat || 0 }}F
             </v-list-item-subtitle>
           </v-list-item>
 
@@ -126,10 +133,15 @@
             @click="addMealItem(meal)"
             :class="{ active: selectedIndex === getMealIndex(index) }"
           >
+            <template #prepend>
+              <v-icon color="green">mdi-food-turkey</v-icon>
+            </template>
             <v-list-item-title>{{ meal.name }}</v-list-item-title>
             <v-list-item-subtitle>
-              {{ meal.macros.calories }} cal • {{ meal.macros.protein }}P /
-              {{ meal.macros.carbs }}C / {{ meal.macros.fat }}F
+              {{ (meal.totalMacros || meal.macros || {}).calories || 0 }} cal • 
+              {{ (meal.totalMacros || meal.macros || {}).protein || 0 }}P /
+              {{ (meal.totalMacros || meal.macros || {}).carbs || 0 }}C / 
+              {{ (meal.totalMacros || meal.macros || {}).fat || 0 }}F
             </v-list-item-subtitle>
           </v-list-item>
 
@@ -271,14 +283,20 @@ const filteredRecipes = computed(() => {
   if (!searchQuery.value.trim()) return [];
   const query = searchQuery.value.toLowerCase();
   return props.recipes.filter((recipe) =>
-    recipe.name.toLowerCase().includes(query)
+    recipe.name.toLowerCase().includes(query) ||
+    (recipe.description || "").toLowerCase().includes(query) ||
+    (recipe.tags || []).some((tag) => tag.toLowerCase().includes(query))
   );
 });
 
 const filteredMeals = computed(() => {
   if (!searchQuery.value.trim()) return [];
   const query = searchQuery.value.toLowerCase();
-  return props.meals.filter((meal) => meal.name.toLowerCase().includes(query));
+  return props.meals.filter((meal) =>
+    meal.name.toLowerCase().includes(query) ||
+    (meal.description || "").toLowerCase().includes(query) ||
+    (meal.tags || []).some((tag) => tag.toLowerCase().includes(query))
+  );
 });
 
 const hasResults = computed(
@@ -434,7 +452,7 @@ function addFoodItem(food) {
     sourceId: food.id,
     name: food.name,
     amount: 1,
-    unit: food.servingUnit || "serving",
+    unit: food.defaultServingSize || food.servingUnit || "serving",
     macros: { ...food.macrosPerServing },
     macrosSource: "auto",
   };
@@ -444,13 +462,14 @@ function addFoodItem(food) {
 }
 
 function addRecipeItem(recipe) {
+  const macros = recipe.totalMacros || { calories: 0, protein: 0, carbs: 0, fat: 0 };
   const item = {
     type: "recipe",
     sourceId: recipe.id,
     name: recipe.name,
     amount: 1,
     unit: "serving",
-    macros: { ...recipe.totalMacros },
+    macros: { ...macros },
     macrosSource: "auto",
   };
 
@@ -459,13 +478,14 @@ function addRecipeItem(recipe) {
 }
 
 function addMealItem(meal) {
+  const macros = meal.totalMacros || meal.macros || { calories: 0, protein: 0, carbs: 0, fat: 0 };
   const item = {
     type: "meal",
     sourceId: meal.id,
     name: meal.name,
     amount: 1,
     unit: "serving",
-    macros: { ...meal.macros },
+    macros: { ...macros },
     macrosSource: "auto",
   };
 
@@ -527,21 +547,38 @@ function clearAndFocus() {
   focusInput();
 }
 
-// Browse methods
+// Browse methods - show all items in dropdown
 function showAllFoods() {
-  // Could emit event to show full foods list
-  console.log("Show all foods");
-  hideDropdown();
+  searchQuery.value = "";
+  showDropdown.value = true;
+  selectedIndex.value = 0;
+  // The dropdown will show all items when search is empty
+  // Focus will trigger the dropdown to show browse options
+  nextTick(() => {
+    focusInput();
+  });
 }
 
 function showAllRecipes() {
-  console.log("Show all recipes");
-  hideDropdown();
+  // Show all recipes by setting a very broad search
+  searchQuery.value = " ";
+  showDropdown.value = true;
+  selectedIndex.value = 0;
+  nextTick(() => {
+    searchQuery.value = "";
+    focusInput();
+  });
 }
 
 function showAllMeals() {
-  console.log("Show all meals");
-  hideDropdown();
+  // Show all meals by setting a very broad search
+  searchQuery.value = " ";
+  showDropdown.value = true;
+  selectedIndex.value = 0;
+  nextTick(() => {
+    searchQuery.value = "";
+    focusInput();
+  });
 }
 
 // Recent customs management
@@ -607,9 +644,11 @@ defineExpose({
   top: 100%;
   left: 0;
   right: 0;
-  z-index: 1000;
-  max-height: 400px;
+  z-index: 2000;
+  max-height: 500px;
   overflow-y: auto;
+  margin-top: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .custom-item-form {
@@ -622,5 +661,12 @@ defineExpose({
 
 .v-list-item:hover {
   background-color: rgb(var(--v-theme-primary-lighten-5));
+}
+
+.v-list-subheader {
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.5px;
 }
 </style>
