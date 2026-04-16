@@ -78,23 +78,21 @@
 
     <v-divider />
 
+    <!-- Quick Add Form - Sticky at top -->
+    <div class="quick-add-sticky">
+      <QuickAddForm
+        ref="quickAddForm"
+        :foods="foods"
+        :recipes="recipes"
+        :meals="libraryMeals"
+        :meal-time="mealDraft.name"
+        @add="addItem"
+      />
+    </div>
+
     <v-card-text class="pt-4">
       <div v-if="!meal.items.length" class="text-grey text-center pa-4">
-        No items yet — press
-        <strong>Add item</strong>
-        to start planning.
-      </div>
-
-      <!-- Quick Add Form -->
-      <div class="mb-4">
-        <QuickAddForm
-          ref="quickAddForm"
-          :foods="foods"
-          :recipes="recipes"
-          :meals="libraryMeals"
-          :meal-time="mealDraft.name"
-          @add="addItem"
-        />
+        No items yet — use the search bar above to add items.
       </div>
 
       <div v-for="item in meal.items" :key="item.id" class="meal-item mb-3">
@@ -130,7 +128,18 @@
             />
           </v-col>
           <v-col cols="6" md="3">
+            <v-select
+              v-if="item.type === 'food'"
+              v-model="item.unit"
+              :items="getServingOptions(item)"
+              label="Serving"
+              density="compact"
+              hide-details
+              variant="outlined"
+              @update:model-value="onServingChange(item)"
+            />
             <v-text-field
+              v-else
               v-model="item.unit"
               label="Unit"
               density="compact"
@@ -390,6 +399,79 @@ function onAmountChange(item) {
   syncMeal();
 }
 
+function onServingChange(item) {
+  if (item.macrosSource === "overridden") return;
+  if (item.type === "food") {
+    const food = store.getItemDetails("food", item.sourceId);
+    if (food) {
+      const unit = item.unit || null;
+      const amount = item.amount || 1;
+      if (unit && food.gramsPerServing > 0) {
+        const perGram = {
+          calories:
+            (food.macrosPerServing.calories || 0) / food.gramsPerServing,
+          protein: (food.macrosPerServing.protein || 0) / food.gramsPerServing,
+          carbs: (food.macrosPerServing.carbs || 0) / food.gramsPerServing,
+          fat: (food.macrosPerServing.fat || 0) / food.gramsPerServing,
+        };
+        const found = (food.servings || []).find((s) => s.label === unit);
+        if (found && found.grams > 0) {
+          const gramsTotal = found.grams * amount;
+          item.macros = {
+            calories: perGram.calories * gramsTotal,
+            protein: perGram.protein * gramsTotal,
+            carbs: perGram.carbs * gramsTotal,
+            fat: perGram.fat * gramsTotal,
+          };
+        } else if (unit === food.defaultServingSize) {
+          // Use default serving calculation
+          item.macros = store.calculateItemMacros(
+            "food",
+            item.sourceId,
+            amount
+          );
+        } else {
+          item.macros = store.calculateItemMacros(
+            "food",
+            item.sourceId,
+            amount
+          );
+        }
+      } else {
+        item.macros = store.calculateItemMacros("food", item.sourceId, amount);
+      }
+    }
+  }
+  syncMeal();
+}
+
+function getServingOptions(item) {
+  if (item.type !== "food") return [];
+  const food = store.getItemDetails("food", item.sourceId);
+  if (!food) return [];
+
+  const options = [];
+  // Add default serving
+  if (food.defaultServingSize) {
+    options.push({
+      title: food.defaultServingSize,
+      value: food.defaultServingSize,
+    });
+  }
+  // Add additional servings
+  if (Array.isArray(food.servings)) {
+    food.servings.forEach((s) => {
+      if (s.label && !options.find((o) => o.value === s.label)) {
+        options.push({
+          title: s.label,
+          value: s.label,
+        });
+      }
+    });
+  }
+  return options;
+}
+
 function markManual(item) {
   item.macrosSource = "overridden";
   syncMeal();
@@ -496,6 +578,16 @@ function syncMeal() {
 <style scoped>
 .meal-card {
   overflow: hidden;
+}
+
+.quick-add-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: white;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .meal-item {
