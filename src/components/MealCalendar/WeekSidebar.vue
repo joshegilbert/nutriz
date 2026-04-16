@@ -1,75 +1,110 @@
 <template>
   <v-card class="week-sidebar elevation-1 rounded-xl pa-4">
     <!-- Week Navigation -->
-    <div class="week-nav d-flex align-center justify-space-between mb-3">
-      <v-btn
-        icon="mdi-chevron-left"
-        variant="text"
-        density="compact"
-        color="primary"
-        @click="prevWeek"
-        :disabled="currentWeekIndex === 0"
-      />
-      <div class="text-subtitle-2 font-weight-medium text-center week-range">
-        {{ weekRangeLabel }}
+    <div class="week-nav d-flex align-center justify-space-between mb-2">
+      <div class="d-flex align-center" style="gap:6px;">
+        <v-btn
+          icon="mdi-chevron-left"
+          variant="text"
+          density="compact"
+          color="primary"
+          @click="prevWeek"
+        />
+        <div class="text-subtitle-2 font-weight-medium text-center week-range">
+          {{ weekRangeLabel }}
+        </div>
+        <v-btn
+          icon="mdi-chevron-right"
+          variant="text"
+          density="compact"
+          color="primary"
+          @click="nextWeek"
+        />
       </div>
-      <v-btn
-        icon="mdi-chevron-right"
-        variant="text"
-        density="compact"
-        color="primary"
-        @click="nextWeek"
-        :disabled="currentWeekIndex === totalWeeks - 1"
-      />
+      <v-btn size="x-small" variant="tonal" color="primary" @click="goToday">
+        Today
+      </v-btn>
+    </div>
+    <v-divider class="mb-2" />
+
+    <!-- Weekly Averages (compact) -->
+    <div class="avg-grid mb-3">
+      <div class="avg-item">
+        <span class="label">Cal</span>
+        <span class="value">{{ weeklyAverages.calories }}</span>
+      </div>
+      <div class="avg-item">
+        <span class="label">P</span>
+        <span class="value">{{ weeklyAverages.protein }}</span>
+      </div>
+      <div class="avg-item">
+        <span class="label">C</span>
+        <span class="value">{{ weeklyAverages.carbs }}</span>
+      </div>
+      <div class="avg-item">
+        <span class="label">F</span>
+        <span class="value">{{ weeklyAverages.fat }}</span>
+      </div>
     </div>
 
     <v-divider class="mb-3" />
 
-    <!-- Days List -->
-    <div class="day-list">
-      <v-sheet
-        v-for="day in visibleDays"
-        :key="day.date"
-        class="day-block rounded-lg pa-3 mb-3"
-        :class="{ active: selectedDate?.date === day.date }"
-        @click="$emit('selectDay', day)"
-        elevation="0"
-      >
-        <div class="d-flex justify-space-between align-center mb-2">
+    <!-- Days List (Mon–Sun) -->
+    <draggable
+      v-model="draggableDays"
+      class="day-list"
+      item-key="date"
+      @end="onDragEnd"
+      handle=".drag-handle"
+      :animation="200"
+    >
+      <template #item="{ element: day }">
+        <v-sheet
+          :key="day.date"
+          class="day-block rounded-lg pa-3 mb-3"
+          :class="{ active: selectedDate?.date === day.date }"
+          @click="$emit('selectDay', day)"
+          elevation="0"
+        >
+          <div class="drag-handle" style="cursor: move; position: absolute; top: 8px; right: 8px; opacity: 0.5;">
+            <v-icon size="small">mdi-drag</v-icon>
+          </div>
+        <div class="d-flex justify-space-between align-center mb-1">
           <div class="day-info">
             <div class="day-name">
               {{ format(localDateFromISO(day.date), "EEEE") }}
+              <v-chip
+                v-if="day.activeVariant && day.activeVariant !== 'A'"
+                size="x-small"
+                class="ml-1"
+                variant="tonal"
+                color="primary"
+              >
+                {{ day.activeVariant }}
+              </v-chip>
             </div>
             <div class="day-date text-grey-darken-1">
               {{ format(localDateFromISO(day.date), "MMM d") }}
             </div>
           </div>
         </div>
-
-        <v-divider class="my-2" />
-
-        <div class="macro-table">
-          <div class="macro-row">
-            <span class="label">Calories</span>
-            <span class="value">{{ day.macros?.calories ?? 0 }}</span>
-          </div>
-          <div class="macro-row">
-            <span class="label">Protein</span>
-            <span class="value">{{ day.macros?.protein ?? 0 }} g</span>
-          </div>
-          <div class="macro-row">
-            <span class="label">Carbs</span>
-            <span class="value">{{ day.macros?.carbs ?? 0 }} g</span>
-          </div>
-          <div class="macro-row">
-            <span class="label">Fat</span>
-            <span class="value">{{ day.macros?.fat ?? 0 }} g</span>
-          </div>
+        <div class="macro-line-compact">
+          <span class="value">{{ day.macros?.calories ?? 0 }} kcal</span>
+          <span class="sep">·</span>
+          <span class="value">P{{ day.macros?.protein ?? 0 }}</span>
+          <span class="sep">/</span>
+          <span class="value">C{{ day.macros?.carbs ?? 0 }}</span>
+          <span class="sep">/</span>
+          <span class="value">F{{ day.macros?.fat ?? 0 }}</span>
+          <v-spacer />
+          <span class="items">{{ (day.meals || []).length }} meals</span>
         </div>
-      </v-sheet>
-    </div>
+        </v-sheet>
+      </template>
+    </draggable>
 
-    <v-divider class="my-4" />
+    
+    
 
     <!-- Copy / Paste Controls -->
     <v-row no-gutters class="action-row">
@@ -106,54 +141,94 @@
 
 <script setup>
 import { ref, computed, watch } from "vue";
-import { format, addDays } from "date-fns";
+import { format, addDays, startOfWeek } from "date-fns";
+import draggable from "vuedraggable";
 
 const props = defineProps({
   program: { type: Object, required: true },
   selectedDate: { type: Object, required: false, default: null },
 });
 
-const emit = defineEmits(["selectDay", "updateProgram"]);
+const emit = defineEmits(["selectDay", "updateProgram", "goToday"]);
 
 const clipboardDay = ref(null);
-const currentWeekIndex = ref(0);
-const daysPerWeek = 7;
+const weekStartsOn = 1; // Monday
+const anchorDate = ref(null);
 
-// 🔢 Total weeks in the program
-const totalWeeks = computed(() =>
-  Math.ceil(props.program.days.length / daysPerWeek)
-);
+// 🗓️ Build calendar week (Mon–Sun) from anchor
+const weekDates = computed(() => {
+  const anchor = anchorDate.value || new Date();
+  const start = startOfWeek(anchor, { weekStartsOn });
+  return Array.from({ length: 7 }, (_, i) => addDays(start, i));
+});
 
-// 🗓️ Days shown in the current week
 const visibleDays = computed(() => {
-  const start = currentWeekIndex.value * daysPerWeek;
-  const end = start + daysPerWeek;
-  return props.program.days.slice(start, end);
+  const list = [];
+  const all = props.program?.days || [];
+  weekDates.value.forEach((d) => {
+    const iso = format(d, "yyyy-MM-dd");
+    const found = all.find((x) => x.date === iso);
+    list.push(
+      found || { date: iso, meals: [], macros: { calories: 0, protein: 0, carbs: 0, fat: 0 }, macrosSource: "auto", activeVariant: 'A' }
+    );
+  });
+  return list;
+});
+
+// Draggable days - reactive copy for drag-and-drop
+const draggableDays = computed({
+  get: () => visibleDays.value,
+  set: (newValue) => {
+    // This will be handled by onDragEnd
+  }
+});
+
+// Weekly averages across visible days
+const weeklyAverages = computed(() => {
+  const days = visibleDays.value || [];
+  const count = days.length || 1;
+  const totals = days.reduce(
+    (acc, d) => {
+      const m = d?.macros || {};
+      acc.calories += Number(m.calories || 0);
+      acc.protein += Number(m.protein || 0);
+      acc.carbs += Number(m.carbs || 0);
+      acc.fat += Number(m.fat || 0);
+      return acc;
+    },
+    { calories: 0, protein: 0, carbs: 0, fat: 0 }
+  );
+  return {
+    calories: Math.round(totals.calories / count),
+    protein: +(totals.protein / count).toFixed(1),
+    carbs: +(totals.carbs / count).toFixed(1),
+    fat: +(totals.fat / count).toFixed(1),
+  };
 });
 
 // 📆 Display range label
 const weekRangeLabel = computed(() => {
-  if (!visibleDays.value.length) return "";
-  const start = localDateFromISO(visibleDays.value[0].date);
-  const end = localDateFromISO(visibleDays.value[visibleDays.value.length - 1].date);
+  if (!weekDates.value.length) return "";
+  const start = weekDates.value[0];
+  const end = weekDates.value[weekDates.value.length - 1];
   return `${format(start, "MMM d")} – ${format(end, "MMM d")}`;
 });
 
 // ◀️ ▶️ Week navigation
 function prevWeek() {
-  if (currentWeekIndex.value > 0) {
-    currentWeekIndex.value--;
-    // Auto select first day of the newly visible week
-    if (visibleDays.value.length) emit("selectDay", visibleDays.value[0]);
-  }
+  const base = anchorDate.value || new Date();
+  anchorDate.value = addDays(base, -7);
+  if (visibleDays.value.length) emit("selectDay", visibleDays.value[0]);
 }
 
 function nextWeek() {
-  if (currentWeekIndex.value < totalWeeks.value - 1) {
-    currentWeekIndex.value++;
-    // Auto select first day of the newly visible week
-    if (visibleDays.value.length) emit("selectDay", visibleDays.value[0]);
-  }
+  const base = anchorDate.value || new Date();
+  anchorDate.value = addDays(base, 7);
+  if (visibleDays.value.length) emit("selectDay", visibleDays.value[0]);
+}
+
+function goToday() {
+  emit("goToday");
 }
 
 // 🧩 Copy / Paste
@@ -180,6 +255,72 @@ function pasteDay() {
   emit("updateProgram", props.program);
 }
 
+// Drag and drop handler - moves day content and shifts others
+function onDragEnd(event) {
+  const { oldIndex, newIndex } = event;
+  if (oldIndex === newIndex) return;
+
+  const weekDayDates = weekDates.value.map(d => format(d, "yyyy-MM-dd"));
+  const allDays = [...(props.program?.days || [])];
+  
+  // Get source day (the one being dragged)
+  const sourceDate = weekDayDates[oldIndex];
+  const targetDate = weekDayDates[newIndex];
+  
+  // Find or create day objects for all week dates
+  const weekDays = weekDayDates.map(date => {
+    const existing = allDays.find(d => d.date === date);
+    if (existing) return existing;
+    // Create empty day if it doesn't exist
+    return {
+      date,
+      meals: [],
+      macros: { calories: 0, protein: 0, carbs: 0, fat: 0 },
+      macrosSource: "auto",
+      activeVariant: 'A'
+    };
+  });
+
+  // Get the source day's content
+  const sourceDayContent = JSON.parse(JSON.stringify(weekDays[oldIndex]));
+
+  // Shift days between old and new position
+  if (oldIndex < newIndex) {
+    // Moving down: shift days up
+    for (let i = oldIndex; i < newIndex; i++) {
+      weekDays[i].meals = JSON.parse(JSON.stringify(weekDays[i + 1].meals));
+      weekDays[i].macros = JSON.parse(JSON.stringify(weekDays[i + 1].macros));
+      weekDays[i].activeVariant = weekDays[i + 1].activeVariant || 'A';
+    }
+  } else {
+    // Moving up: shift days down
+    for (let i = oldIndex; i > newIndex; i--) {
+      weekDays[i].meals = JSON.parse(JSON.stringify(weekDays[i - 1].meals));
+      weekDays[i].macros = JSON.parse(JSON.stringify(weekDays[i - 1].macros));
+      weekDays[i].activeVariant = weekDays[i - 1].activeVariant || 'A';
+    }
+  }
+
+  // Place source content at target position
+  weekDays[newIndex].meals = sourceDayContent.meals;
+  weekDays[newIndex].macros = sourceDayContent.macros;
+  weekDays[newIndex].activeVariant = sourceDayContent.activeVariant || 'A';
+
+  // Update program days - merge with existing days outside the week
+  const updatedDays = [...allDays];
+  weekDays.forEach(weekDay => {
+    const existingIndex = updatedDays.findIndex(d => d.date === weekDay.date);
+    if (existingIndex >= 0) {
+      updatedDays[existingIndex] = weekDay;
+    } else {
+      updatedDays.push(weekDay);
+    }
+  });
+
+  props.program.days = updatedDays;
+  emit("updateProgram", props.program);
+}
+
 function localDateFromISO(iso) {
   if (!iso) return new Date();
   const [y, m, d] = iso.split("-").map(Number);
@@ -192,8 +333,7 @@ watch(
   (newDate) => {
     if (!newDate) return;
     const all = props.program?.days || [];
-    const idx = all.findIndex((d) => d.date === newDate);
-    if (idx >= 0) currentWeekIndex.value = Math.floor(idx / daysPerWeek);
+    anchorDate.value = localDateFromISO(newDate);
   },
   { immediate: true }
 );
@@ -216,6 +356,32 @@ watch(
   text-align: center;
 }
 
+.avg-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.avg-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f5f7fb;
+  border: 1px solid #e6ebf5;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 0.85rem;
+}
+
+.avg-item .label {
+  color: #6b7280;
+}
+
+.avg-item .value {
+  font-weight: 600;
+  color: #111827;
+}
+
 .day-list {
   max-height: 600px;
   overflow-y: auto;
@@ -227,6 +393,7 @@ watch(
   border: 1px solid #eee;
   transition: all 0.2s ease;
   cursor: pointer;
+  position: relative;
 }
 
 .day-block:hover {
@@ -267,6 +434,16 @@ watch(
   font-weight: 600;
   color: #333;
 }
+
+.macro-line-compact {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+}
+.macro-line-compact .value { font-weight: 600; color: #333; }
+.macro-line-compact .sep { color: #9aa0a6; }
+.macro-line-compact .items { color: #6b7280; font-size: 0.78rem; }
 
 .action-row {
   margin-top: 8px;

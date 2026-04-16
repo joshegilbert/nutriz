@@ -21,6 +21,10 @@ const FoodItemSchema = new mongoose.Schema({
         type: String,
         required: [true, 'Please add a default serving size']
     },
+    gramsPerServing: { // grams represented by the defaultServingSize (used for conversions)
+        type: Number,
+        default: 0
+    },
     caloriesPerServing: {
         type: Number,
         required: [true, 'Please add calories per serving']
@@ -28,6 +32,13 @@ const FoodItemSchema = new mongoose.Schema({
     proteinPerServing: Number,
     carbsPerServing: Number,
     fatPerServing: Number,
+    servings: { // additional serving presets selectable in UI
+        type: [new mongoose.Schema({
+            label: { type: String, required: true },
+            grams: { type: Number, required: true },
+        }, { _id: false })],
+        default: () => []
+    },
     // You can add more nutritional info here as needed (e.g., fiber, sugar, sodium)
     createdAt: {
         type: Date,

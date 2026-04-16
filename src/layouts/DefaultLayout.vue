@@ -32,6 +32,7 @@
         <v-list-item prepend-icon="mdi-food-apple" title="Foods" value="foods" to="/foods" />
         <v-list-item prepend-icon="mdi-silverware" title="Meals" value="meals" to="/meals" />
         <v-list-item prepend-icon="mdi-receipt-text" title="Recipes" value="recipes" to="/recipes" />
+        <v-list-item prepend-icon="mdi-folder-star" title="Templates" value="templates" to="/templates" />
         <v-list-item prepend-icon="mdi-file-chart" title="Reports" value="reports" to="/reports" />
       </v-list>
     </v-navigation-drawer>

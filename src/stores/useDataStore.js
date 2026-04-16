@@ -2,6 +2,10 @@ import { defineStore } from "pinia";
 import { ref } from "vue";
 import api from "@/services/api";
 
+const MEAL_TEMPLATE_API_ENABLED =
+  import.meta.env.VITE_ENABLE_MEAL_TEMPLATE_API === "true";
+const MEAL_TEMPLATE_STORAGE_KEY = "nutriz.mealTemplates.v1";
+
 function createId(prefix = "id") {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -748,8 +752,68 @@ export const useDataStore = defineStore("data", () => {
   const isLoadingRecipes = ref(false);
   const lastError = ref("");
 
+  // Meal templates
+  const mealTemplates = ref([]);
+  const isLoadingMealTemplates = ref(false);
+  const mealTemplateFeatureAvailable = ref(MEAL_TEMPLATE_API_ENABLED);
+
   // Clipboard for meals (copy/paste across the day editor)
   const mealClipboard = ref(null);
+  // Templates storage
+  const dayTemplates = ref([]); // full day (meals + items)
+  const dayLayoutTemplates = ref([]); // layout only (meal names/times)
+
+  const TPL_STORAGE_KEY = "nutriz.templates.v1";
+  function loadTemplatesFromStorage() {
+    try {
+      const raw = localStorage.getItem(TPL_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed.dayTemplates))
+        dayTemplates.value = parsed.dayTemplates;
+      if (Array.isArray(parsed.dayLayoutTemplates))
+        dayLayoutTemplates.value = parsed.dayLayoutTemplates;
+    } catch (_) {
+      // ignore
+    }
+  }
+  function saveTemplatesToStorage() {
+    try {
+      const payload = {
+        dayTemplates: dayTemplates.value,
+        dayLayoutTemplates: dayLayoutTemplates.value,
+      };
+      localStorage.setItem(TPL_STORAGE_KEY, JSON.stringify(payload));
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  function loadMealTemplatesFromStorage() {
+    try {
+      const raw = localStorage.getItem(MEAL_TEMPLATE_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        mealTemplates.value = parsed
+          .map((tpl) => normaliseMealTemplate(tpl))
+          .filter(Boolean);
+      }
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  function saveMealTemplatesToStorage() {
+    try {
+      localStorage.setItem(
+        MEAL_TEMPLATE_STORAGE_KEY,
+        JSON.stringify(mealTemplates.value)
+      );
+    } catch (_) {
+      // ignore
+    }
+  }
 
   function resetAll() {
     foods.value = [];
@@ -762,7 +826,16 @@ export const useDataStore = defineStore("data", () => {
     isLoadingRecipes.value = false;
     lastError.value = "";
     mealClipboard.value = null;
+    dayTemplates.value = [];
+    dayLayoutTemplates.value = [];
+    mealTemplates.value = [];
+    mealTemplateFeatureAvailable.value = MEAL_TEMPLATE_API_ENABLED;
+    saveMealTemplatesToStorage();
   }
+
+  // Load templates on init
+  loadTemplatesFromStorage();
+  loadMealTemplatesFromStorage();
 
   // ---------------------------------------------------------------------------
   //  DATA NORMALISERS
@@ -807,13 +880,51 @@ export const useDataStore = defineStore("data", () => {
   }
 
   function toDay(day) {
+    const baseMeals = Array.isArray(day.meals)
+      ? day.meals.map((m) => toMeal(m))
+      : [];
+    // Variants support: prefer variants' active set if present
+    const variants = Array.isArray(day.variants)
+      ? day.variants.map((v) => ({
+          key: String(v.key || "A"),
+          label: v.label || "",
+          meals: Array.isArray(v.meals) ? v.meals.map((m) => toMeal(m)) : [],
+          macros: createMacroTotals(v.macros),
+          macrosSource: v.macrosSource === "overridden" ? "overridden" : "auto",
+        }))
+      : [];
+    const activeKey = day.activeVariant || (variants[0]?.key ?? "A");
+    if (variants.length) {
+      const activeVariant =
+        variants.find((variant) => variant.key === activeKey) || variants[0];
+      activeVariant.meals = baseMeals;
+      if (day.macrosSource !== "overridden") {
+        activeVariant.macros = createMacroTotals(day.macros);
+        activeVariant.macrosSource = day.macrosSource || "auto";
+      }
+    }
+    const activeMeals = variants.length
+      ? variants.find((variant) => variant.key === activeKey)?.meals ||
+        variants[0].meals
+      : baseMeals;
+
     return {
       date: day.date,
-      meals: Array.isArray(day.meals)
-        ? day.meals.map((meal) => toMeal(meal))
-        : [],
+      meals: activeMeals,
       macros: createMacroTotals(day.macros),
       macrosSource: day.macrosSource || "auto",
+      activeVariant: activeKey,
+      variants: variants.length
+        ? variants
+        : [
+            {
+              key: "A",
+              label: "Option A",
+              meals: baseMeals,
+              macros: createMacroTotals(day.macros),
+              macrosSource: day.macrosSource || "auto",
+            },
+          ],
     };
   }
 
@@ -822,13 +933,21 @@ export const useDataStore = defineStore("data", () => {
     const base = cloneDeep(program);
     const id = base._id || base.id || createId("program");
     const clientId = base.clientId || base.client || base.owner || null;
-    const startDate = base.startDate || base.days?.[0]?.date || toLocalISODate(new Date());
+    const startDate =
+      base.startDate || base.days?.[0]?.date || toLocalISODate(new Date());
     const macros = createMacroTotals(base.macros);
-    const macrosSource = base.macrosSource === "overridden" ? "overridden" : "auto";
+    const macrosSource =
+      base.macrosSource === "overridden" ? "overridden" : "auto";
 
-    let days = Array.isArray(base.days) ? base.days.map((day) => toDay(day)) : [];
+    let days = Array.isArray(base.days)
+      ? base.days.map((day) => toDay(day))
+      : [];
     if (!days.length) {
-      const blank = createBlankProgram({ clientId, startDate, length: base.length || 7 });
+      const blank = createBlankProgram({
+        clientId,
+        startDate,
+        length: base.length || 7,
+      });
       days = blank.days;
     }
 
@@ -881,13 +1000,16 @@ export const useDataStore = defineStore("data", () => {
   function normaliseClient(document, previous = null) {
     if (!document && !previous) return null;
     const existing = previous || {};
-    const id = document?._id || document?.id || existing.id || createId("client");
+    const id =
+      document?._id || document?.id || existing.id || createId("client");
 
     const dobIso = document?.dob
       ? toLocalISODate(new Date(document.dob))
       : existing.dob || "";
 
-    const createdIso = document?.createdAt
+    const createdIso = document?.lastActive
+      ? toLocalISODate(new Date(document.lastActive))
+      : document?.createdAt
       ? toLocalISODate(new Date(document.createdAt))
       : existing.last_active || toLocalISODate(new Date());
 
@@ -900,12 +1022,16 @@ export const useDataStore = defineStore("data", () => {
     return {
       id,
       name: document?.name ?? existing.name ?? "",
-      status: existing.status || "Active",
+      status: document?.status ?? existing.status ?? "Active",
       email: document?.contact?.email ?? existing.email ?? "",
       phone: document?.contact?.phone ?? existing.phone ?? "",
       dob: dobIso,
+      gender: document?.gender ?? existing.gender ?? "",
+      weight: document?.weight ?? existing.weight ?? null,
+      state: document?.state ?? existing.state ?? "",
       goals: document?.goals ?? existing.goals ?? [],
       notes: document?.notes ?? existing.notes ?? "",
+      measurementPreference: document?.measurementPreference ?? existing.measurementPreference ?? "metric",
       last_active: createdIso,
       programs: programSource,
       raw: document || existing.raw || null,
@@ -916,6 +1042,12 @@ export const useDataStore = defineStore("data", () => {
     const body = {
       name: payload.name,
       dob: payload.dob || null,
+      status: payload.status || undefined,
+      gender: payload.gender || undefined,
+      weight: payload.weight ?? undefined,
+      state: payload.state || undefined,
+      measurementPreference: payload.measurementPreference || undefined,
+      lastActive: payload.last_active || payload.lastActive || undefined,
       contact: {
         email: payload.email || "",
         phone: payload.phone || "",
@@ -928,6 +1060,11 @@ export const useDataStore = defineStore("data", () => {
     if (!body.contact.email) delete body.contact.email;
     if (!Object.keys(body.contact).length) delete body.contact;
 
+    // Remove undefined optional fields to avoid overwriting
+    Object.keys(body).forEach((k) => {
+      if (body[k] === undefined) delete body[k];
+    });
+
     return body;
   }
 
@@ -939,11 +1076,18 @@ export const useDataStore = defineStore("data", () => {
       category: document.category || "Other",
       defaultServingSize: document.defaultServingSize || "1 serving",
       servingUnit: document.defaultServingSize || "1 serving",
+      gramsPerServing: Number(document.gramsPerServing) || 0,
       brand: document.brand || "",
       caloriesPerServing: document.caloriesPerServing || 0,
       proteinPerServing: document.proteinPerServing || 0,
       carbsPerServing: document.carbsPerServing || 0,
       fatPerServing: document.fatPerServing || 0,
+      servings: Array.isArray(document.servings)
+        ? document.servings.map((s) => ({
+            label: s.label || "",
+            grams: Number(s.grams) || 0,
+          }))
+        : [],
       macrosPerServing: {
         calories: document.caloriesPerServing || 0,
         protein: document.proteinPerServing || 0,
@@ -958,10 +1102,19 @@ export const useDataStore = defineStore("data", () => {
       name: payload.name,
       category: payload.category || "Other",
       defaultServingSize: payload.defaultServingSize || "1 serving",
+      gramsPerServing: Number(payload.gramsPerServing) || 0,
       caloriesPerServing: Number(payload.caloriesPerServing) || 0,
       proteinPerServing: Number(payload.proteinPerServing) || 0,
       carbsPerServing: Number(payload.carbsPerServing) || 0,
       fatPerServing: Number(payload.fatPerServing) || 0,
+      servings: Array.isArray(payload.servings)
+        ? payload.servings
+            .map((s) => ({
+              label: String(s.label || "").trim(),
+              grams: Number(s.grams) || 0,
+            }))
+            .filter((s) => s.label && s.grams > 0)
+        : [],
     };
   }
 
@@ -988,16 +1141,13 @@ export const useDataStore = defineStore("data", () => {
       };
     });
 
-    const totalMacros = components.reduce(
-      (acc, component) => {
-        acc.calories += component.macros?.calories || 0;
-        acc.protein += component.macros?.protein || 0;
-        acc.carbs += component.macros?.carbs || 0;
-        acc.fat += component.macros?.fat || 0;
-        return acc;
-      },
-      createMacroTotals()
-    );
+    const totalMacros = components.reduce((acc, component) => {
+      acc.calories += component.macros?.calories || 0;
+      acc.protein += component.macros?.protein || 0;
+      acc.carbs += component.macros?.carbs || 0;
+      acc.fat += component.macros?.fat || 0;
+      return acc;
+    }, createMacroTotals());
 
     return {
       id: document._id || document.id,
@@ -1020,7 +1170,10 @@ export const useDataStore = defineStore("data", () => {
           quantity: Number(component.amount) || 1,
           notes: component.notes || "",
         });
-      } else if (component.type === "meal" && Array.isArray(component.components)) {
+      } else if (
+        component.type === "meal" &&
+        Array.isArray(component.components)
+      ) {
         component.components.forEach((item) => {
           if (item.foodId) {
             ingredients.push({
@@ -1040,6 +1193,87 @@ export const useDataStore = defineStore("data", () => {
       instructions: payload.instructions || "",
       ingredients,
       tags: payload.tags || [],
+    };
+  }
+
+  function normaliseMealTemplate(document) {
+    if (!document) return null;
+
+    return {
+      id: document._id || document.id,
+      name: document.name || "",
+      tags: document.tags || [],
+      meal: {
+        name: document.meal?.name || "",
+        time: document.meal?.time || "",
+        items: (document.meal?.items || []).map((item) => toMealItem(item)),
+        macros: createMacroTotals(document.meal?.macros),
+        macrosSource: document.meal?.macrosSource || "auto",
+      },
+      totalMacros: createMacroTotals(document.totalMacros),
+      itemCount: document.itemCount || 0,
+      createdAt: document.createdAt
+        ? new Date(document.createdAt).getTime()
+        : Date.now(),
+      updatedAt: document.updatedAt
+        ? new Date(document.updatedAt).getTime()
+        : Date.now(),
+    };
+  }
+
+  function serialiseMealTemplate(payload = {}) {
+    return {
+      name: payload.name,
+      tags: payload.tags || [],
+      meal: {
+        name: payload.meal?.name || "",
+        time: payload.meal?.time || "",
+        items: (payload.meal?.items || []).map((item) => ({
+          id: item.id || createId("item"),
+          type: item.type || "custom",
+          sourceId: item.sourceId ?? null,
+          name: item.name || "",
+          amount: Number(item.amount) || 0,
+          unit: item.unit || "",
+          notes: item.notes || "",
+          time: item.time || "",
+          macros: roundMacros(item.macros || {}),
+          macrosSource:
+            item.macrosSource === "overridden" ? "overridden" : "auto",
+        })),
+        macros: roundMacros(payload.meal?.macros || {}),
+        macrosSource:
+          payload.meal?.macrosSource === "overridden" ? "overridden" : "auto",
+      },
+    };
+  }
+
+  function buildLocalMealTemplate(payload = {}, base = {}) {
+    const seed = base || {};
+    const mealSource = payload.meal || seed.meal || {};
+    const meal = toMeal({
+      ...mealSource,
+      id: mealSource.id || createId("meal"),
+      items: mealSource.items || [],
+    });
+    recalcMealTotals(meal);
+    const nameInput =
+      payload.name ?? seed.name ?? meal.name ?? "Meal template";
+    const name =
+      String(nameInput || "Meal template").trim() || "Meal template";
+    return {
+      id: seed.id || payload.id || createId("meal_tpl"),
+      name,
+      tags: Array.isArray(payload.tags)
+        ? payload.tags
+        : Array.isArray(seed.tags)
+        ? seed.tags
+        : [],
+      meal,
+      totalMacros: calcMealTotals(meal),
+      itemCount: meal.items.length,
+      createdAt: seed.createdAt || Date.now(),
+      updatedAt: Date.now(),
     };
   }
 
@@ -1124,20 +1358,31 @@ export const useDataStore = defineStore("data", () => {
       ...(document || {}),
     };
 
-    program.id = document?._id || document?.id || existing.id || createId("program");
+    program.id =
+      document?._id || document?.id || existing.id || createId("program");
     program.clientId =
-      program.clientId || document?.client || document?.clientId || existing.clientId || null;
+      program.clientId ||
+      document?.client ||
+      document?.clientId ||
+      existing.clientId ||
+      null;
     if (program.clientId) {
       program.clientId = String(program.clientId);
     }
     program.name = document?.name || existing.name || "";
     program.startDate =
-      document?.startDate || existing.startDate || program.days?.[0]?.date || toLocalISODate(new Date());
+      document?.startDate ||
+      existing.startDate ||
+      program.days?.[0]?.date ||
+      toLocalISODate(new Date());
     program.length =
-      document?.length || existing.length || (document?.days?.length ?? existing.days?.length ?? 0);
+      document?.length ||
+      existing.length ||
+      (document?.days?.length ?? existing.days?.length ?? 0);
     program.days = document?.days || existing.days || [];
     program.macros = document?.macros || existing.macros || createMacroTotals();
-    program.macrosSource = document?.macrosSource || existing.macrosSource || "auto";
+    program.macrosSource =
+      document?.macrosSource || existing.macrosSource || "auto";
 
     return ensureProgramStructure(program);
   }
@@ -1150,18 +1395,21 @@ export const useDataStore = defineStore("data", () => {
       startDate: structured.startDate,
       length: structured.length || structured.days.length,
       macros: roundMacros(structured.macros),
-      macrosSource: structured.macrosSource === "overridden" ? "overridden" : "auto",
+      macrosSource:
+        structured.macrosSource === "overridden" ? "overridden" : "auto",
       days: (structured.days || []).map((day) => ({
         date: day.date,
         macros: roundMacros(day.macros),
         macrosSource: day.macrosSource === "overridden" ? "overridden" : "auto",
+        // Persist active set on the top-level meals for backward compatibility
         meals: (day.meals || []).map((meal) => ({
           id: meal.id,
           name: meal.name || meal.mealTime || "Meal",
           mealTime: meal.mealTime || meal.name || "Meal",
           time: meal.time || "",
           macros: roundMacros(meal.macros),
-          macrosSource: meal.macrosSource === "overridden" ? "overridden" : "auto",
+          macrosSource:
+            meal.macrosSource === "overridden" ? "overridden" : "auto",
           items: (meal.items || []).map((item) => ({
             id: item.id,
             type: item.type || (item.sourceId ? "food" : "custom"),
@@ -1172,7 +1420,37 @@ export const useDataStore = defineStore("data", () => {
             notes: item.notes || "",
             time: item.time || "",
             macros: roundMacros(item.macros),
-            macrosSource: item.macrosSource === "overridden" ? "overridden" : "auto",
+            macrosSource:
+              item.macrosSource === "overridden" ? "overridden" : "auto",
+          })),
+        })),
+        activeVariant: day.activeVariant || "A",
+        variants: (day.variants || []).map((v) => ({
+          key: String(v.key || "A"),
+          label: v.label || "",
+          macros: roundMacros(v.macros || day.macros),
+          macrosSource: v.macrosSource === "overridden" ? "overridden" : "auto",
+          meals: (v.meals || []).map((meal) => ({
+            id: meal.id,
+            name: meal.name || meal.mealTime || "Meal",
+            mealTime: meal.mealTime || meal.name || "Meal",
+            time: meal.time || "",
+            macros: roundMacros(meal.macros),
+            macrosSource:
+              meal.macrosSource === "overridden" ? "overridden" : "auto",
+            items: (meal.items || []).map((item) => ({
+              id: item.id,
+              type: item.type || (item.sourceId ? "food" : "custom"),
+              sourceId: item.sourceId ?? null,
+              name: item.name || "",
+              amount: Number(item.amount) || 0,
+              unit: item.unit || "",
+              notes: item.notes || "",
+              time: item.time || "",
+              macros: roundMacros(item.macros),
+              macrosSource:
+                item.macrosSource === "overridden" ? "overridden" : "auto",
+            })),
           })),
         })),
       })),
@@ -1205,6 +1483,32 @@ export const useDataStore = defineStore("data", () => {
       carbs: base.carbs + normaliseNumber(addition?.carbs),
       fat: base.fat + normaliseNumber(addition?.fat),
     };
+  }
+
+  function calcFoodMacrosByUnit(food, amount = 1, unitLabel = null) {
+    if (!food || amount <= 0) return { ...EMPTY_MACROS };
+    // Default: per serving scaling
+    let factor = amount;
+    if (unitLabel && Array.isArray(food.servings) && food.gramsPerServing > 0) {
+      const found = food.servings.find((s) => s.label === unitLabel);
+      if (found && found.grams > 0) {
+        const perGram = {
+          calories:
+            (food.macrosPerServing.calories || 0) / food.gramsPerServing,
+          protein: (food.macrosPerServing.protein || 0) / food.gramsPerServing,
+          carbs: (food.macrosPerServing.carbs || 0) / food.gramsPerServing,
+          fat: (food.macrosPerServing.fat || 0) / food.gramsPerServing,
+        };
+        const gramsTotal = found.grams * amount;
+        return {
+          calories: perGram.calories * gramsTotal,
+          protein: perGram.protein * gramsTotal,
+          carbs: perGram.carbs * gramsTotal,
+          fat: perGram.fat * gramsTotal,
+        };
+      }
+    }
+    return scaleMacros(food.macrosPerServing, factor);
   }
 
   function scaleMacros(macros, factor) {
@@ -1255,44 +1559,59 @@ export const useDataStore = defineStore("data", () => {
     if (foodId != null) {
       const food = getItemDetails("food", foodId);
       if (!food) return { ...EMPTY_MACROS };
-      return scaleMacros(food.macrosPerServing, component.amount ?? 1);
+      const unitLabel = component.unit || null;
+      return calcFoodMacrosByUnit(food, component.amount ?? 1, unitLabel);
     }
 
     return { ...EMPTY_MACROS };
   }
 
   function collectMealMacros(components = []) {
-    return components.reduce((totals, component) => {
-      return addMacros(totals, collectComponentMacros(component));
-    }, { ...EMPTY_MACROS });
+    return components.reduce(
+      (totals, component) => {
+        return addMacros(totals, collectComponentMacros(component));
+      },
+      { ...EMPTY_MACROS }
+    );
   }
 
   function collectRecipeMacros(components = []) {
-    return components.reduce((totals, component) => {
-      const componentType = component.type || (component.foodId ? "food" : null);
+    return components.reduce(
+      (totals, component) => {
+        const componentType =
+          component.type || (component.foodId ? "food" : null);
 
-      if (componentType === "food") {
-        const foodId = component.foodId ?? component.sourceId ?? component.id;
-        if (foodId == null) {
-          return totals;
+        if (componentType === "food") {
+          const foodId = component.foodId ?? component.sourceId ?? component.id;
+          if (foodId == null) {
+            return totals;
+          }
+
+          const food = getItemDetails("food", foodId);
+          if (!food) {
+            return totals;
+          }
+
+          const macros = scaleMacros(
+            food.macrosPerServing,
+            component.amount ?? 1
+          );
+          return addMacros(totals, macros);
         }
 
-        const food = getItemDetails("food", foodId);
-        if (!food) {
-          return totals;
+        if (componentType && component.sourceId != null) {
+          const macros = calculateItemMacros(
+            componentType,
+            component.sourceId,
+            component.amount
+          );
+          return addMacros(totals, macros);
         }
 
-        const macros = scaleMacros(food.macrosPerServing, component.amount ?? 1);
-        return addMacros(totals, macros);
-      }
-
-      if (componentType && component.sourceId != null) {
-        const macros = calculateItemMacros(componentType, component.sourceId, component.amount);
-        return addMacros(totals, macros);
-      }
-
-      return addMacros(totals, component.macros);
-    }, { ...EMPTY_MACROS });
+        return addMacros(totals, component.macros);
+      },
+      { ...EMPTY_MACROS }
+    );
   }
 
   function calculateItemMacros(type, id, amount = 1) {
@@ -1369,6 +1688,286 @@ export const useDataStore = defineStore("data", () => {
     day.macros = calcDayTotals(day);
   }
 
+  // ------------------------------
+  //  VARIANTS (A/B day options)
+  // ------------------------------
+
+  // ------------------------------
+  //  VARIANTS (A/B day options)
+  // ------------------------------
+  function ensureVariant(day, key = "B", { duplicateFrom = "A", label } = {}) {
+    if (!day) return;
+    if (!Array.isArray(day.variants)) day.variants = [];
+    const exists = day.variants.find((v) => v.key === key);
+    if (exists) return exists;
+    const source =
+      day.variants.find((v) => v.key === duplicateFrom) || day.variants[0];
+    const next = {
+      key,
+      label: label || (key === "A" ? "Option A" : `Option ${key}`),
+      meals: (source?.meals || []).map((m) => toMeal(m)),
+      macros: createMacroTotals(source?.macros || day.macros),
+      macrosSource: source?.macrosSource || day.macrosSource || "auto",
+    };
+    day.variants.push(next);
+    return next;
+  }
+
+  function setActiveVariant(day, key) {
+    if (!day || !Array.isArray(day.variants)) return;
+    const target = day.variants.find((v) => v.key === key);
+    if (!target) return;
+    day.activeVariant = key;
+    // Swap active meals to top-level for editor and calculations
+    day.meals = target.meals.map((m) => toMeal(m));
+    if (day.macrosSource !== "overridden") {
+      recalcDayTotals(day);
+    }
+  }
+
+  function renameVariant(day, key, newLabel) {
+    if (!day || !Array.isArray(day.variants)) return;
+    const target = day.variants.find((v) => v.key === key);
+    if (!target) return;
+    target.label = newLabel || "";
+  }
+
+  function nextVariantKeyFor(day) {
+    const keys = (day?.variants || []).map((v) =>
+      String(v.key || "").toUpperCase()
+    );
+    let code = "A".charCodeAt(0);
+    while (keys.includes(String.fromCharCode(code))) code++;
+    return String.fromCharCode(code);
+  }
+
+  function duplicateVariant(day, key, newKey) {
+    if (!day || !Array.isArray(day.variants)) return null;
+    const source = day.variants.find((v) => v.key === key) || day.variants[0];
+    if (!source) return null;
+    const keyToUse = newKey || nextVariantKeyFor(day);
+    const copy = {
+      key: keyToUse,
+      label: source.label ? `${source.label} (copy)` : `Option ${keyToUse}`,
+      meals: (source.meals || []).map((m) => toMeal(m)),
+      macros: createMacroTotals(source.macros),
+      macrosSource: source.macrosSource || "auto",
+    };
+    day.variants.push(copy);
+    setActiveVariant(day, keyToUse);
+    return copy;
+  }
+
+  function deleteVariant(day, key) {
+    if (!day || !Array.isArray(day.variants)) return;
+    if (day.variants.length <= 1) return; // keep at least one
+    const idx = day.variants.findIndex((v) => v.key === key);
+    if (idx === -1) return;
+    day.variants.splice(idx, 1);
+    const nextActive = day.variants[0].key;
+    setActiveVariant(day, nextActive);
+  }
+
+  // ------------------------------
+  //  TEMPLATES (Day layout + Day full)
+  // ------------------------------
+  function createTemplateId(prefix = "tpl") {
+    return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  // Backend template sync helpers
+  async function fetchTemplates() {
+    try {
+      const { data } = await api.get("/templates");
+      const days = [];
+      const layouts = [];
+      (data || []).forEach((tpl) => {
+        const base = {
+          id: tpl._id || tpl.id,
+          name: tpl.name || "",
+          tags: Array.isArray(tpl.tags) ? tpl.tags : [],
+          createdAt: new Date(tpl.createdAt || Date.now()).getTime(),
+        };
+        if (tpl.type === "day") {
+          days.push({
+            ...base,
+            meals: (tpl.meals || []).map((m) => toMeal(m)),
+          });
+        } else if (tpl.type === "layout") {
+          layouts.push({
+            ...base,
+            meals: (tpl.layoutMeals || []).map((lm) => ({
+              name: lm.name || "Meal",
+              time: lm.time || "",
+            })),
+          });
+        }
+      });
+      dayTemplates.value = days;
+      dayLayoutTemplates.value = layouts;
+      saveTemplatesToStorage();
+      return { day: days, layout: layouts };
+    } catch (e) {
+      // fallback to localStorage content
+      return { day: dayTemplates.value, layout: dayLayoutTemplates.value };
+    }
+  }
+
+  async function createTemplateOnServer(payload) {
+    const { data } = await api.post("/templates", payload);
+    return data;
+  }
+
+  async function updateTemplateOnServer(id, payload) {
+    const { data } = await api.put(`/templates/${id}`, payload);
+    return data;
+  }
+
+  async function deleteTemplateOnServer(id) {
+    await api.delete(`/templates/${id}`);
+  }
+
+  async function saveDayLayoutTemplateFromDay(day, { name, tags = [] } = {}) {
+    if (!day) return null;
+    const template = {
+      id: createTemplateId("tpl_layout"),
+      name: name || `Layout ${toLocalISODate(new Date())}`,
+      tags: Array.isArray(tags) ? tags : [],
+      meals: (day.meals || []).map((m) => ({
+        name: m.name || m.mealTime || "Meal",
+        time: m.time || "",
+      })),
+      createdAt: Date.now(),
+    };
+    try {
+      const created = await createTemplateOnServer({
+        type: "layout",
+        name: template.name,
+        tags: template.tags,
+        layoutMeals: template.meals,
+      });
+      const normalised = { ...template, id: created._id || created.id };
+      dayLayoutTemplates.value = [normalised, ...dayLayoutTemplates.value];
+      saveTemplatesToStorage();
+      return normalised;
+    } catch (e) {
+      // fallback local
+      dayLayoutTemplates.value = [template, ...dayLayoutTemplates.value];
+      saveTemplatesToStorage();
+      return template;
+    }
+  }
+
+  async function saveDayTemplateFromDay(day, { name, tags = [] } = {}) {
+    if (!day) return null;
+    const template = {
+      id: createTemplateId("tpl_day"),
+      name: name || `Day ${toLocalISODate(new Date())}`,
+      tags: Array.isArray(tags) ? tags : [],
+      meals: (day.meals || []).map((m) => toMeal(m)),
+      createdAt: Date.now(),
+    };
+    try {
+      const created = await createTemplateOnServer({
+        type: "day",
+        name: template.name,
+        tags: template.tags,
+        meals: template.meals,
+      });
+      const normalised = { ...template, id: created._id || created.id };
+      dayTemplates.value = [normalised, ...dayTemplates.value];
+      saveTemplatesToStorage();
+      return normalised;
+    } catch (e) {
+      dayTemplates.value = [template, ...dayTemplates.value];
+      saveTemplatesToStorage();
+      return template;
+    }
+  }
+
+  function applyDayLayoutTemplate(
+    programInstance,
+    dayDate,
+    template,
+    { replace = true } = {}
+  ) {
+    if (!programInstance || !dayDate || !template) return;
+    const day = programInstance.days.find((d) => d.date === dayDate);
+    if (!day) return;
+    const layoutMeals = (template.meals || []).map((def) =>
+      toMeal({ name: def.name || "Meal", time: def.time || "", items: [] })
+    );
+    if (replace) {
+      day.meals = layoutMeals;
+    } else {
+      day.meals.push(...layoutMeals);
+    }
+    recalcDayTotals(day);
+  }
+
+  function applyDayTemplate(
+    programInstance,
+    dayDate,
+    template,
+    { replace = true } = {}
+  ) {
+    if (!programInstance || !dayDate || !template) return;
+    const day = programInstance.days.find((d) => d.date === dayDate);
+    if (!day) return;
+    const fullMeals = (template.meals || []).map((m) => toMeal(m));
+    if (replace) {
+      day.meals = fullMeals;
+    } else {
+      day.meals.push(...fullMeals);
+    }
+    recalcDayTotals(day);
+  }
+
+  function listTemplates() {
+    return {
+      day: dayTemplates.value,
+      layout: dayLayoutTemplates.value,
+    };
+  }
+
+  async function deleteTemplate(type, id) {
+    if (type === "day") {
+      dayTemplates.value = dayTemplates.value.filter((t) => t.id !== id);
+    } else if (type === "layout") {
+      dayLayoutTemplates.value = dayLayoutTemplates.value.filter(
+        (t) => t.id !== id
+      );
+    }
+    try {
+      await deleteTemplateOnServer(id);
+    } catch (e) {}
+    saveTemplatesToStorage();
+  }
+
+  async function renameTemplate(type, id, name) {
+    const list = type === "day" ? dayTemplates.value : dayLayoutTemplates.value;
+    const t = list.find((x) => x.id === id);
+    if (t) {
+      t.name = name || t.name;
+      try {
+        await updateTemplateOnServer(id, { name: t.name });
+      } catch (e) {}
+      saveTemplatesToStorage();
+    }
+  }
+
+  async function setTemplateTags(type, id, tags) {
+    const list = type === "day" ? dayTemplates.value : dayLayoutTemplates.value;
+    const t = list.find((x) => x.id === id);
+    if (t) {
+      t.tags = Array.isArray(tags) ? tags : [];
+      try {
+        await updateTemplateOnServer(id, { tags: t.tags });
+      } catch (e) {}
+      saveTemplatesToStorage();
+    }
+  }
+
   function setLastError(err) {
     lastError.value = err || "";
   }
@@ -1392,12 +1991,16 @@ export const useDataStore = defineStore("data", () => {
     }
 
     if (client.programs.length) {
-      const normalised = client.programs.map((program) => ensureProgramStructure(program));
+      const normalised = client.programs.map((program) =>
+        ensureProgramStructure(program)
+      );
       client.programs.splice(0, client.programs.length, ...normalised);
       return normalised[0] || null;
     }
 
-    const placeholder = ensureProgramStructure(createBlankProgram({ clientId }));
+    const placeholder = ensureProgramStructure(
+      createBlankProgram({ clientId })
+    );
     client.programs = [placeholder];
 
     try {
@@ -1408,7 +2011,9 @@ export const useDataStore = defineStore("data", () => {
       return placeholder;
     } catch (error) {
       const message =
-        error.response?.data?.message || error.message || "Failed to save program.";
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to save program.";
       setLastError(message);
       throw error;
     }
@@ -1430,7 +2035,10 @@ export const useDataStore = defineStore("data", () => {
       (programResponse.data || []).forEach((programDoc) => {
         const normalised = normaliseProgram(programDoc);
         const key =
-          normalised?.clientId || programDoc.client || programDoc.clientId || null;
+          normalised?.clientId ||
+          programDoc.client ||
+          programDoc.clientId ||
+          null;
         if (!key) return;
         const id = String(key);
         if (!programsByClient.has(id)) {
@@ -1441,7 +2049,8 @@ export const useDataStore = defineStore("data", () => {
 
       const mapped = (clientResponse.data || []).map((doc) => {
         const id = String(doc._id || doc.id);
-        const existing = clients.value.find((client) => client.id === id) || null;
+        const existing =
+          clients.value.find((client) => client.id === id) || null;
         const enriched = {
           ...doc,
           programs: programsByClient.get(id) || existing?.programs || [],
@@ -1451,16 +2060,23 @@ export const useDataStore = defineStore("data", () => {
 
       clients.value = mapped;
 
-      const needsPrograms = clients.value.filter((client) => !client.programs.length);
+      const needsPrograms = clients.value.filter(
+        (client) => !client.programs.length
+      );
       if (needsPrograms.length) {
         await Promise.all(
-          needsPrograms.map((client) => ensureClientProgram(client.id).catch(() => null))
+          needsPrograms.map((client) =>
+            ensureClientProgram(client.id).catch(() => null)
+          )
         );
       }
 
       return clients.value;
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to load clients.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to load clients.";
       setLastError(message);
       throw error;
     } finally {
@@ -1479,7 +2095,10 @@ export const useDataStore = defineStore("data", () => {
       await ensureClientProgram(normalised.id).catch(() => {});
       return normalised;
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to create client.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to create client.";
       setLastError(message);
       throw error;
     } finally {
@@ -1502,7 +2121,10 @@ export const useDataStore = defineStore("data", () => {
       }
       return updated;
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to update client.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to update client.";
       setLastError(message);
       throw error;
     } finally {
@@ -1518,7 +2140,10 @@ export const useDataStore = defineStore("data", () => {
       await api.delete(`/clients/${clientId}`);
       clients.value = clients.value.filter((client) => client.id !== clientId);
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to delete client.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to delete client.";
       setLastError(message);
       throw error;
     } finally {
@@ -1534,7 +2159,10 @@ export const useDataStore = defineStore("data", () => {
       foods.value = data.map((doc) => normaliseFood(doc));
       return foods.value;
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to load foods.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to load foods.";
       setLastError(message);
       throw error;
     } finally {
@@ -1550,7 +2178,10 @@ export const useDataStore = defineStore("data", () => {
       meals.value = data.map((doc) => normaliseMeal(doc));
       return meals.value;
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to load meals.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to load meals.";
       setLastError(message);
       throw error;
     } finally {
@@ -1568,7 +2199,10 @@ export const useDataStore = defineStore("data", () => {
       meals.value = [normalised, ...meals.value];
       return normalised;
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to create meal.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to create meal.";
       setLastError(message);
       throw error;
     } finally {
@@ -1590,7 +2224,10 @@ export const useDataStore = defineStore("data", () => {
       }
       return updated;
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to update meal.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to update meal.";
       setLastError(message);
       throw error;
     } finally {
@@ -1606,7 +2243,10 @@ export const useDataStore = defineStore("data", () => {
       await api.delete(`/meals/${mealId}`);
       meals.value = meals.value.filter((meal) => meal.id !== mealId);
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to delete meal.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to delete meal.";
       setLastError(message);
       throw error;
     } finally {
@@ -1624,7 +2264,10 @@ export const useDataStore = defineStore("data", () => {
       foods.value = [normalised, ...foods.value];
       return normalised;
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to create food item.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to create food item.";
       setLastError(message);
       throw error;
     } finally {
@@ -1646,7 +2289,10 @@ export const useDataStore = defineStore("data", () => {
       }
       return updated;
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to update food item.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to update food item.";
       setLastError(message);
       throw error;
     } finally {
@@ -1662,7 +2308,10 @@ export const useDataStore = defineStore("data", () => {
       await api.delete(`/fooditems/${foodId}`);
       foods.value = foods.value.filter((food) => food.id !== foodId);
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to delete food item.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to delete food item.";
       setLastError(message);
       throw error;
     } finally {
@@ -1678,7 +2327,10 @@ export const useDataStore = defineStore("data", () => {
       recipes.value = data.map((doc) => normaliseRecipe(doc));
       return recipes.value;
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to load recipes.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to load recipes.";
       setLastError(message);
       throw error;
     } finally {
@@ -1696,7 +2348,10 @@ export const useDataStore = defineStore("data", () => {
       recipes.value = [normalised, ...recipes.value];
       return normalised;
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to create recipe.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to create recipe.";
       setLastError(message);
       throw error;
     } finally {
@@ -1718,7 +2373,10 @@ export const useDataStore = defineStore("data", () => {
       }
       return updated;
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to update recipe.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to update recipe.";
       setLastError(message);
       throw error;
     } finally {
@@ -1734,11 +2392,178 @@ export const useDataStore = defineStore("data", () => {
       await api.delete(`/recipes/${recipeId}`);
       recipes.value = recipes.value.filter((recipe) => recipe.id !== recipeId);
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Failed to delete recipe.";
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to delete recipe.";
       setLastError(message);
       throw error;
     } finally {
       isLoadingRecipes.value = false;
+    }
+  }
+
+  // Meal Templates
+  async function fetchMealTemplates({ force = false } = {}) {
+    if (!mealTemplateFeatureAvailable.value) {
+      return mealTemplates.value;
+    }
+
+    if (!force && mealTemplates.value.length) {
+      return mealTemplates.value;
+    }
+
+    isLoadingMealTemplates.value = true;
+    setLastError("");
+    try {
+      const { data } = await api.get("/meal-templates");
+      mealTemplates.value = (data || []).map(normaliseMealTemplate);
+      saveMealTemplatesToStorage();
+      return mealTemplates.value;
+    } catch (error) {
+      if (error.response?.status === 404) {
+        // Endpoint not available yet (older backend) – fall back gracefully
+        mealTemplateFeatureAvailable.value = false;
+        mealTemplates.value = mealTemplates.value.length
+          ? mealTemplates.value
+          : [];
+        saveMealTemplatesToStorage();
+        return mealTemplates.value;
+      }
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to load meal templates.";
+      setLastError(message);
+      throw error;
+    } finally {
+      isLoadingMealTemplates.value = false;
+    }
+  }
+
+  async function createMealTemplate(payload) {
+    isLoadingMealTemplates.value = true;
+    setLastError("");
+    try {
+      if (!mealTemplateFeatureAvailable.value) {
+        const template = buildLocalMealTemplate(payload);
+        mealTemplates.value = [template, ...mealTemplates.value];
+        saveMealTemplatesToStorage();
+        return template;
+      }
+
+      const body = serialiseMealTemplate(payload);
+      const { data } = await api.post("/meal-templates", body);
+      const normalised = normaliseMealTemplate(data);
+      mealTemplates.value = [normalised, ...mealTemplates.value];
+      saveMealTemplatesToStorage();
+      return normalised;
+    } catch (error) {
+      if (error.response?.status === 404) {
+        mealTemplateFeatureAvailable.value = false;
+        const template = buildLocalMealTemplate(payload);
+        mealTemplates.value = [template, ...mealTemplates.value];
+        saveMealTemplatesToStorage();
+        return template;
+      }
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to create meal template.";
+      setLastError(message);
+      throw error;
+    } finally {
+      isLoadingMealTemplates.value = false;
+    }
+  }
+
+  async function updateMealTemplate(templateId, payload) {
+    if (!templateId) return null;
+    isLoadingMealTemplates.value = true;
+    setLastError("");
+    try {
+      const index = mealTemplates.value.findIndex(
+        (template) => template.id === templateId
+      );
+      if (index === -1) return null;
+
+      if (!mealTemplateFeatureAvailable.value) {
+        const updatedLocal = buildLocalMealTemplate(
+          payload,
+          mealTemplates.value[index]
+        );
+        mealTemplates.value.splice(index, 1, updatedLocal);
+        saveMealTemplatesToStorage();
+        return updatedLocal;
+      }
+
+      const body = serialiseMealTemplate(payload);
+      const { data } = await api.put(`/meal-templates/${templateId}`, body);
+      const updated = normaliseMealTemplate(data);
+      mealTemplates.value.splice(index, 1, updated);
+      saveMealTemplatesToStorage();
+      return updated;
+    } catch (error) {
+      if (error.response?.status === 404) {
+        mealTemplateFeatureAvailable.value = false;
+        const index = mealTemplates.value.findIndex(
+          (template) => template.id === templateId
+        );
+        if (index === -1) return null;
+        const updatedLocal = buildLocalMealTemplate(
+          payload,
+          mealTemplates.value[index]
+        );
+        mealTemplates.value.splice(index, 1, updatedLocal);
+        saveMealTemplatesToStorage();
+        return updatedLocal;
+      }
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to update meal template.";
+      setLastError(message);
+      throw error;
+    } finally {
+      isLoadingMealTemplates.value = false;
+    }
+  }
+
+  async function deleteMealTemplate(templateId) {
+    if (!templateId) return;
+    isLoadingMealTemplates.value = true;
+    setLastError("");
+    try {
+      if (!mealTemplateFeatureAvailable.value) {
+        mealTemplates.value = mealTemplates.value.filter(
+          (template) => template.id !== templateId
+        );
+        saveMealTemplatesToStorage();
+        return;
+      }
+
+      await api.delete(`/meal-templates/${templateId}`);
+      mealTemplates.value = mealTemplates.value.filter(
+        (template) => template.id !== templateId
+      );
+      saveMealTemplatesToStorage();
+    } catch (error) {
+      if (error.response?.status === 404) {
+        mealTemplateFeatureAvailable.value = false;
+        mealTemplates.value = mealTemplates.value.filter(
+          (template) => template.id !== templateId
+        );
+        saveMealTemplatesToStorage();
+        return;
+      }
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to delete meal template.";
+      setLastError(message);
+      throw error;
+    } finally {
+      isLoadingMealTemplates.value = false;
     }
   }
   async function getProgramByClientId(clientId) {
@@ -1780,7 +2605,9 @@ export const useDataStore = defineStore("data", () => {
     try {
       const saved = await persistProgram(structured);
       if (saved) {
-        const replaceIndex = client.programs.findIndex((p) => p.id === previousId);
+        const replaceIndex = client.programs.findIndex(
+          (p) => p.id === previousId
+        );
         if (replaceIndex !== -1) {
           client.programs.splice(replaceIndex, 1, saved);
         } else {
@@ -1792,22 +2619,46 @@ export const useDataStore = defineStore("data", () => {
       return structured;
     } catch (error) {
       const message =
-        error.response?.data?.message || error.message || "Failed to save program.";
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to save program.";
       setLastError(message);
       throw error;
     }
   }
 
   function createMeal(payload = {}) {
-    return toMeal({
+    const meal = toMeal({
+      id: payload.id || createId("meal"),
+      ...payload,
+    });
+
+    const sourceItems = Array.isArray(payload.items)
+      ? payload.items
+      : meal.items;
+
+    meal.items = sourceItems
+      .map((item) => (item ? createMealItem(item) : null))
+      .filter(Boolean);
+
+    recalcMealTotals(meal);
+    return meal;
+  }
+
+  function createMealFromTemplate(template) {
+    const meal = toMeal({
       id: createId("meal"),
-      name: payload.name || "Meal",
-      mealTime: payload.name || payload.mealTime,
-      time: payload.time || "",
-      items: [],
-      macros: createMacroTotals(),
+      name: template.meal.name || "Meal",
+      mealTime: template.meal.name || "Meal",
+      time: template.meal.time || "",
+      items: (template.meal.items || []).map((item) => toMealItem(item)),
+      macros: createMacroTotals(template.meal.macros),
       macrosSource: "auto",
     });
+
+    // Recalculate totals
+    recalcMealTotals(meal);
+    return meal;
   }
 
   function createMealItem(payload = {}) {
@@ -1891,7 +2742,11 @@ export const useDataStore = defineStore("data", () => {
 
   function ensureProgramIncludesDate(programInstance, isoDate) {
     if (!programInstance || !isoDate) return;
-    if (!Array.isArray(programInstance.days) || programInstance.days.length === 0) return;
+    if (
+      !Array.isArray(programInstance.days) ||
+      programInstance.days.length === 0
+    )
+      return;
     const firstIso = programInstance.days[0].date;
     const lastIso = programInstance.days[programInstance.days.length - 1].date;
     let first = parseLocalISO(firstIso);
@@ -1903,7 +2758,12 @@ export const useDataStore = defineStore("data", () => {
       first.setDate(first.getDate() - 1);
       const newIso = toLocalISODate(first);
       programInstance.days.unshift(
-        toDay({ date: newIso, meals: [], macros: createMacroTotals(), macrosSource: "auto" })
+        toDay({
+          date: newIso,
+          meals: [],
+          macros: createMacroTotals(),
+          macrosSource: "auto",
+        })
       );
     }
     // Extend forwards
@@ -1911,7 +2771,12 @@ export const useDataStore = defineStore("data", () => {
       last.setDate(last.getDate() + 1);
       const newIso = toLocalISODate(last);
       programInstance.days.push(
-        toDay({ date: newIso, meals: [], macros: createMacroTotals(), macrosSource: "auto" })
+        toDay({
+          date: newIso,
+          meals: [],
+          macros: createMacroTotals(),
+          macrosSource: "auto",
+        })
       );
     }
   }
@@ -1974,13 +2839,19 @@ export const useDataStore = defineStore("data", () => {
     updateFood,
     deleteFood,
     fetchMeals,
-    createMealTemplate,
-    updateMealTemplate,
-    deleteMealTemplate,
     fetchRecipes,
     createRecipe,
     updateRecipe,
     deleteRecipe,
+
+    // meal templates
+    mealTemplates,
+    isLoadingMealTemplates,
+    mealTemplateFeatureAvailable,
+    fetchMealTemplates,
+    createMealTemplate,
+    updateMealTemplate,
+    deleteMealTemplate,
 
     // programs
     getProgramByClientId,
@@ -1989,6 +2860,11 @@ export const useDataStore = defineStore("data", () => {
     removeMealFromDay,
     updateMeal,
     ensureProgramIncludesDate,
+    createMeal,
+    createMealFromTemplate,
+    attachItemToMeal,
+    removeItemFromMeal,
+    duplicateMealItems,
 
     // calculators/utils
     getItemDetails,
@@ -2005,5 +2881,25 @@ export const useDataStore = defineStore("data", () => {
 
     // misc
     resetAll,
+
+    // variants
+    ensureVariant,
+    setActiveVariant,
+    renameVariant,
+    duplicateVariant,
+    deleteVariant,
+
+    // templates
+    fetchTemplates,
+    dayTemplates,
+    dayLayoutTemplates,
+    listTemplates,
+    saveDayLayoutTemplateFromDay,
+    saveDayTemplateFromDay,
+    applyDayLayoutTemplate,
+    applyDayTemplate,
+    deleteTemplate,
+    renameTemplate,
+    setTemplateTags,
   };
 });

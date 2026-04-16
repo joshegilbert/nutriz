@@ -6,7 +6,8 @@
     "test": "node tests/mealHelpers.test.js",
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview --port 4173"
+    "preview": "vite preview --port 4173",
+    "dev:full": "concurrently -k -n FE,BE -c blue,green \"npm run dev\" \"npm --prefix nutriz-backend start\""
   },
   "keywords": [],
   "author": "",
@@ -14,15 +15,18 @@
   "description": "",
   "dependencies": {
     "@mdi/font": "^7.4.47",
-    "date-fns": "^4.1.0",
     "axios": "^1.7.7",
+    "date-fns": "^4.1.0",
+    "jspdf": "^3.0.3",
     "pinia": "^3.0.3",
     "vue": "^3.5.21",
     "vue-router": "^4.5.1",
+    "vuedraggable": "^4.1.0",
     "vuetify": "^3.10.2"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.1",
+    "concurrently": "^9.0.1",
     "vite": "^7.1.7",
     "vite-plugin-vuetify": "^2.1.2"
   }
