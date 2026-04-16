@@ -6,7 +6,7 @@ const FoodItem = require('../models/FoodItem');
 // @route   POST /api/fooditems
 // @access  Private/Nutritionist
 const createFoodItem = asyncHandler(async (req, res) => {
-    const { name, category, defaultServingSize, caloriesPerServing, proteinPerServing, carbsPerServing, fatPerServing } = req.body;
+    const { name, category, defaultServingSize, gramsPerServing, caloriesPerServing, proteinPerServing, carbsPerServing, fatPerServing, servings } = req.body;
 
     // Check if food item already exists for this nutritionist (optional, but good for custom items)
     const foodItemExists = await FoodItem.findOne({ name, nutritionist: req.user.id });
@@ -21,10 +21,12 @@ const createFoodItem = asyncHandler(async (req, res) => {
         name,
         category,
         defaultServingSize,
+        gramsPerServing,
         caloriesPerServing,
         proteinPerServing,
         carbsPerServing,
-        fatPerServing
+        fatPerServing,
+        servings: Array.isArray(servings) ? servings : []
     });
 
     res.status(201).json(foodItem);

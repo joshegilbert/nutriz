@@ -6,7 +6,7 @@ const Client = require('../models/Client');
 // @route   POST /api/clients
 // @access  Private/Nutritionist
 const createClient = asyncHandler(async (req, res) => {
-    const { name, dob, contact, goals, notes } = req.body;
+    const { name, dob, contact, goals, notes, status, gender, weight, state, lastActive } = req.body;
 
     const client = await Client.create({
         nutritionist: req.user.id,
@@ -14,7 +14,12 @@ const createClient = asyncHandler(async (req, res) => {
         dob,
         contact,
         goals,
-        notes
+        notes,
+        status,
+        gender,
+        weight,
+        state,
+        lastActive
     });
 
     res.status(201).json(client);
