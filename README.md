@@ -121,6 +121,14 @@ Runs the Node-based tests under `tests/` (for example, meal helper logic).
 
 ---
 
+<img width="1512" height="735" alt="Screenshot 2026-04-27 at 10 21 06 PM" src="https://github.com/user-attachments/assets/b00719e8-df9b-47f3-b294-4b1986bcb91f" />
+
+
+<img width="1501" height="708" alt="Screenshot 2026-04-27 at 10 21 33 PM" src="https://github.com/user-attachments/assets/ac1871d1-638b-49cc-acaa-6175cbaceb9b" />
+
+
+
+
 ## License
 
 ISC (see `package.json` files in this repo).
